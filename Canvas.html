@@ -1,15 +1,67 @@
-<h2 class=""> MY FIRST CANVAS GAME</h2>
-<h3 class=""> ㄥ乇ㄒ'丂 乃乇Ꮆ丨几 ㄒ卄乇 千丨Ꮆ卄ㄒ 卂丂卄ㄩ乃ㄖㄚ </h3>
-<canvas id="myCanvas" width="400" height="400"></canvas>
-<button id="kick"> Kick</button>
-<button id="punch"> Punch</button>
-<button id="backward"> backward</button>
-<button id="forward"> forward</button>
-<button id="Block"> Block</button>
-<button id="Dodge"> Dodge</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My First Canvas Game</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 24px;
+      background-image: url("images/background.jpg");
+      background-repeat: no-repeat;
+      background-size: cover;
+      background-position: center;
+      font-family: Arial, sans-serif;
+    }
 
+    h2,
+    h3 {
+      margin: 0;
+      text-align: center;
+      color: white;
+      text-shadow: 1px 1px 2px black;
+    }
 
-<script type="text/javascript"src="Canvas.js"></script>
-<body
-    background = "images/background.jpg"  style="background-repeat: no-repeat;
-    background-size: 100%100%"></body>
+    canvas {
+      border: 2px solid white;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button {
+      padding: 8px 16px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h2>MY FIRST CANVAS GAME</h2>
+  <h3>Use the buttons or arrow keys to play the animations.</h3>
+
+  <canvas id="myCanvas" width="400" height="400"></canvas>
+
+  <div class="controls">
+    <button id="kick">Kick</button>
+    <button id="punch">Punch</button>
+    <button id="backward">Backward</button>
+    <button id="forward">Forward</button>
+    <button id="Block">Block</button>
+    <button id="Dodge">Dodge</button>
+  </div>
+
+  <script src="Canvas.js"></script>
+</body>
+</html>

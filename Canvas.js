@@ -15,7 +15,7 @@ let frames = {
   punch: [1, 2, 3, 4, 5, 6, 7],
   backward: [1, 2, 3, 4, 5, 6],
   Block: [1,2,3,4,5,6,7,8,9],
-    forward: [1, 2, 3, 4, 5, 6],
+  forward: [1, 2, 3, 4, 5, 6],
 };
 
 let loadImages = (callback) => {
@@ -83,39 +83,28 @@ loadImages((images) => {
     queuedAnimations.push("Block");
   };
 
-  
+  document.getElementById("Dodge").onclick = () => {
+    queuedAnimations.push("backward");
+  };
 
-
-
- 
   document.addEventListener("keyup", (event) => {
-    const key = event.key;
-
     switch (event.key) {
-        case "ArrowLeft":
-            queuedAnimation.push("kick");
-            break;
-        case "ArrowRight":
-            queuedAnimation.push("punch");
-            break;
-
-        case "ArrowUp":
-              queuedAnimation.push("backward");
-            break;
-
-        case "ArrowDown":
-              queuedAnimation.push("forward");
-            break;
-
-        case "A":
-              queuedAnimation.push("forward");
-            break;
-
-
-                
-       
+      case "ArrowLeft":
+        queuedAnimations.push("backward");
+        break;
+      case "ArrowRight":
+        queuedAnimations.push("forward");
+        break;
+      case "ArrowUp":
+        queuedAnimations.push("kick");
+        break;
+      case "ArrowDown":
+        queuedAnimations.push("Block");
+        break;
+      case "a":
+      case "A":
+        queuedAnimations.push("punch");
+        break;
     }
-
   });
-
 });
