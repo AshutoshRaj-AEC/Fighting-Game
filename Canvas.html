@@ -3,64 +3,131 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My First Canvas Game</title>
+  <title>Canvas Fighting Game</title>
   <style>
+    :root {
+      --panel: rgba(11, 18, 32, 0.82);
+      --border: rgba(255, 255, 255, 0.2);
+      --text: #f4f7fb;
+      --accent: #ffb703;
+      --accent-2: #8ecae6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 12px;
-      padding: 24px;
-      background-image: url("images/background.jpg");
-      background-repeat: no-repeat;
-      background-size: cover;
-      background-position: center;
+      gap: 16px;
+      padding: 20px;
+      background:
+        linear-gradient(rgba(8, 12, 20, 0.28), rgba(8, 12, 20, 0.75)),
+        url("images/background.jpg") center / cover no-repeat;
       font-family: Arial, sans-serif;
+      color: var(--text);
     }
 
-    h2,
-    h3 {
-      margin: 0;
+    .title {
       text-align: center;
-      color: white;
-      text-shadow: 1px 1px 2px black;
+      max-width: 860px;
+      padding: 16px 18px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(6px);
+      border-radius: 16px;
+    }
+
+    h1,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(28px, 4vw, 44px);
+      letter-spacing: 0.08em;
+    }
+
+    p {
+      margin-top: 8px;
+      color: #d9e2f2;
+      line-height: 1.5;
     }
 
     canvas {
-      border: 2px solid white;
-      background: rgba(255, 255, 255, 0.08);
+      width: min(100%, 920px);
+      height: auto;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 18px;
+      box-shadow: 0 22px 45px rgba(0, 0, 0, 0.35);
+      background: rgba(255, 255, 255, 0.04);
     }
 
     .controls {
+      width: min(100%, 920px);
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(6px);
+      border-radius: 16px;
+    }
+
+    .buttons {
       display: flex;
       flex-wrap: wrap;
+      gap: 10px;
       justify-content: center;
-      gap: 8px;
     }
 
     button {
-      padding: 8px 16px;
-      font-size: 16px;
+      border: 0;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 700;
       cursor: pointer;
+      color: #07111d;
+      background: linear-gradient(135deg, var(--accent), #ffd166);
+    }
+
+    button.secondary {
+      background: linear-gradient(135deg, var(--accent-2), #caf0f8);
+    }
+
+    .hud-copy {
+      text-align: center;
+      color: #e6edf8;
+      font-size: 14px;
     }
   </style>
 </head>
 <body>
-  <h2>MY FIRST CANVAS GAME</h2>
-  <h3>Use the buttons or arrow keys to play the animations.</h3>
+  <section class="title">
+    <h1>Canvas Fighting Game</h1>
+    <p>Prototype v0.4: move, jump, punch, kick, block, dodge, and fight a simple CPU opponent. Use Arrow keys to move, <strong>W</strong> or <strong>Arrow Up</strong> to jump, <strong>A</strong> to punch, <strong>S</strong> to kick, <strong>D</strong> to block, and <strong>Space</strong> to dodge.</p>
+  </section>
 
-  <canvas id="myCanvas" width="400" height="400"></canvas>
+  <canvas id="myCanvas" width="920" height="460"></canvas>
 
-  <div class="controls">
-    <button id="kick">Kick</button>
-    <button id="punch">Punch</button>
-    <button id="backward">Backward</button>
-    <button id="forward">Forward</button>
-    <button id="Block">Block</button>
-    <button id="Dodge">Dodge</button>
-  </div>
+  <section class="controls">
+    <div class="buttons">
+      <button id="kick">Kick</button>
+      <button id="punch">Punch</button>
+      <button id="jump" class="secondary">Jump</button>
+      <button id="backward" class="secondary">Step Back</button>
+      <button id="forward" class="secondary">Step Forward</button>
+      <button id="Block">Block</button>
+      <button id="Dodge" class="secondary">Dodge</button>
+      <button id="restartRound" class="secondary">Restart Round</button>
+    </div>
+    <div class="hud-copy" id="statusText">Fight started. Close the distance and land a hit.</div>
+  </section>
 
   <script src="Canvas.js"></script>
 </body>

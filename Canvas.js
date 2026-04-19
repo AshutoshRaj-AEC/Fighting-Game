@@ -1,110 +1,740 @@
-var c = document.getElementById("myCanvas");
-var ctx = c.getContext("2d");
+const canvas = document.getElementById("myCanvas");
+const ctx = canvas.getContext("2d");
+const statusText = document.getElementById("statusText");
 
-let loadImage = (src, callback) => {
-  let img = document.createElement("img");
-  img.onload = () => callback(img);
-  img.src = src;
+const arena = {
+  width: canvas.width,
+  height: canvas.height,
+  floorY: canvas.height - 62,
 };
-let imagePath = (frameNumber, animation) => {
-  return "images/" + animation + "/" + frameNumber + ".png";
-};
-let frames = {
+
+const frames = {
   idle: [1, 2, 3, 4, 5, 6, 7, 8],
   kick: [1, 2, 3, 4, 5, 6, 7],
   punch: [1, 2, 3, 4, 5, 6, 7],
   backward: [1, 2, 3, 4, 5, 6],
-  Block: [1,2,3,4,5,6,7,8,9],
+  Block: [1, 2, 3, 4, 5, 6, 7, 8, 9],
   forward: [1, 2, 3, 4, 5, 6],
 };
 
-let loadImages = (callback) => {
-  let images = { idle: [], kick: [], punch: [], backward: [], forward: [], Block: [] };
+const imageCache = {};
+const controls = {
+  left: false,
+  right: false,
+  block: false,
+};
+
+const state = {
+  running: true,
+  winner: "",
+  lastTime: 0,
+  cpuDecisionTimer: 0,
+  cpuAttackCooldown: 0,
+};
+
+const physics = {
+  gravity: 1600,
+  jumpVelocity: -700,
+};
+
+let audioContext;
+
+const fighterDefaults = {
+  player: {
+    x: 120,
+    health: 100,
+  },
+  cpu: {
+    x: 640,
+    health: 100,
+  },
+};
+
+function loadImage(src, callback) {
+  const img = new Image();
+  img.onload = () => callback(img);
+  img.src = src;
+}
+
+function imagePath(frameNumber, animation) {
+  return "images/" + animation + "/" + frameNumber + ".png";
+}
+
+function loadImages(callback) {
+  const animations = Object.keys(frames);
+  const images = {};
   let imagesToLoad = 0;
 
-  ["idle", "kick", "punch" , "backward" , "forward" , "Block" ].forEach((animation) => {
-    let animationFrames = frames[animation];
-    imagesToLoad = imagesToLoad + animationFrames.length;
-    animationFrames.forEach((frameNumber) => {
-      let path = imagePath(frameNumber, animation);
+  animations.forEach((animation) => {
+    images[animation] = [];
+    imagesToLoad += frames[animation].length;
+  });
 
-      loadImage(path, (image) => {
-        images[animation][frameNumber - 1] = image;
-        imagesToLoad = imagesToLoad - 1;
+  animations.forEach((animation) => {
+    frames[animation].forEach((frameNumber, index) => {
+      loadImage(imagePath(frameNumber, animation), (image) => {
+        images[animation][index] = image;
+        imagesToLoad -= 1;
+
         if (imagesToLoad === 0) {
           callback(images);
         }
       });
     });
   });
-};
-let animate = (ctx, images, animation, callback) => {
-  images[animation].forEach((image, index) => {
-    setTimeout(() => {
-      ctx.clearRect(0, 0, 500, 500);
-      ctx.drawImage(image, 0, 0, 500, 500);
-    }, index * 100);
-  });
-  setTimeout(callback, images[animation].length * 100);
-};
+}
 
-loadImages((images) => {
-  let queuedAnimations = [];
+function createFighter(config) {
+  return {
+    name: config.name,
+    x: config.x,
+    y: arena.floorY - config.height,
+    width: config.width,
+    height: config.height,
+    facing: config.facing,
+    health: 100,
+    animation: "idle",
+    frameIndex: 0,
+    frameTimer: 0,
+    frameInterval: 0.09,
+    speed: config.speed,
+    isAttacking: false,
+    attackTimer: 0,
+    attackDuration: 0,
+    attackName: "",
+    attackDamage: 0,
+    attackRange: 0,
+    attackConnected: false,
+    isBlocking: false,
+    blockTimer: 0,
+    dodgeTimer: 0,
+    hitFlashTimer: 0,
+    tint: config.tint,
+    spriteScale: config.spriteScale,
+    velocityY: 0,
+    isJumping: false,
+  };
+}
 
-  let aux = () => {
-    let selectedAnimation;
+const player = createFighter({
+  name: "Player",
+  x: 120,
+  width: 180,
+  height: 240,
+  facing: 1,
+  speed: 240,
+  tint: "rgba(255, 196, 61, 0.18)",
+  spriteScale: 1,
+});
 
-    if (queuedAnimations.length === 0) {
-      selectedAnimation = "idle";
-    } else {
-      selectedAnimation = queuedAnimations.shift();
+const cpu = createFighter({
+  name: "CPU",
+  x: 640,
+  width: 180,
+  height: 240,
+  facing: -1,
+  speed: 180,
+  tint: "rgba(70, 160, 255, 0.18)",
+  spriteScale: -1,
+});
+
+function setStatus(message) {
+  statusText.textContent = message;
+}
+
+function getAudioContext() {
+  if (!audioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+      return null;
     }
-    animate(ctx, images, selectedAnimation, aux);
+
+    audioContext = new AudioContextClass();
+  }
+
+  if (audioContext.state === "suspended") {
+    audioContext.resume();
+  }
+
+  return audioContext;
+}
+
+function playSound(type) {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const now = context.currentTime;
+
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+
+  const presets = {
+    punch: { frequency: 240, peak: 0.08, duration: 0.08, wave: "square", sweep: 110 },
+    kick: { frequency: 150, peak: 0.09, duration: 0.14, wave: "sawtooth", sweep: 70 },
+    block: { frequency: 460, peak: 0.06, duration: 0.1, wave: "triangle", sweep: 520 },
+    hit: { frequency: 120, peak: 0.08, duration: 0.12, wave: "square", sweep: 70 },
+    dodge: { frequency: 620, peak: 0.05, duration: 0.12, wave: "triangle", sweep: 420 },
+    jump: { frequency: 340, peak: 0.05, duration: 0.16, wave: "sine", sweep: 520 },
+    win: { frequency: 520, peak: 0.08, duration: 0.4, wave: "triangle", sweep: 760 },
+    restart: { frequency: 300, peak: 0.05, duration: 0.12, wave: "sine", sweep: 420 },
   };
 
-  aux();
-  document.getElementById("kick").onclick = () => {
-    queuedAnimations.push("kick");
-  };
+  const preset = presets[type];
 
-  document.getElementById("punch").onclick = () => {
-    queuedAnimations.push("punch");
-  };
+  if (!preset) {
+    return;
+  }
 
+  oscillator.type = preset.wave;
+  oscillator.frequency.setValueAtTime(preset.frequency, now);
+  oscillator.frequency.exponentialRampToValueAtTime(preset.sweep, now + preset.duration);
+
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(preset.peak, now + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + preset.duration);
+
+  oscillator.start(now);
+  oscillator.stop(now + preset.duration);
+}
+
+function resetFighter(fighter, defaults) {
+  fighter.x = defaults.x;
+  fighter.health = defaults.health;
+  fighter.y = arena.floorY - fighter.height;
+  fighter.animation = "idle";
+  fighter.frameIndex = 0;
+  fighter.frameTimer = 0;
+  fighter.isAttacking = false;
+  fighter.attackTimer = 0;
+  fighter.attackDuration = 0;
+  fighter.attackName = "";
+  fighter.attackDamage = 0;
+  fighter.attackRange = 0;
+  fighter.attackConnected = false;
+  fighter.isBlocking = false;
+  fighter.blockTimer = 0;
+  fighter.dodgeTimer = 0;
+  fighter.hitFlashTimer = 0;
+  fighter.velocityY = 0;
+  fighter.isJumping = false;
+}
+
+function restartRound() {
+  resetFighter(player, fighterDefaults.player);
+  resetFighter(cpu, fighterDefaults.cpu);
+  controls.left = false;
+  controls.right = false;
+  controls.block = false;
+  state.running = true;
+  state.winner = "";
+  state.cpuDecisionTimer = 0;
+  state.cpuAttackCooldown = 0;
+  setStatus("New round started. Step in and throw the first hit.");
+  playSound("restart");
+}
+
+function getCurrentFrame(images, fighter) {
+  const animationFrames = images[fighter.animation] || images.idle;
+  return animationFrames[fighter.frameIndex % animationFrames.length];
+}
+
+function updateAnimation(fighter, dt) {
+  const animationFrames = frames[fighter.animation];
+  fighter.frameTimer += dt;
+
+  if (fighter.frameTimer >= fighter.frameInterval) {
+    fighter.frameTimer = 0;
+    fighter.frameIndex = (fighter.frameIndex + 1) % animationFrames.length;
+  }
+}
+
+function beginAttack(fighter, type) {
+  if (!state.running || fighter.isAttacking || fighter.dodgeTimer > 0 || fighter.blockTimer > 0 || fighter.isJumping) {
+    return;
+  }
+
+  if (type === "punch") {
+    fighter.animation = "punch";
+    fighter.attackName = "Punch";
+    fighter.attackDamage = 12;
+    fighter.attackRange = 110;
+    fighter.attackDuration = 0.48;
+  } else {
+    fighter.animation = "kick";
+    fighter.attackName = "Kick";
+    fighter.attackDamage = 18;
+    fighter.attackRange = 130;
+    fighter.attackDuration = 0.62;
+  }
+
+  fighter.isAttacking = true;
+  fighter.attackConnected = false;
+  fighter.attackTimer = fighter.attackDuration;
+  fighter.frameIndex = 0;
+  fighter.frameTimer = 0;
+  playSound(type);
+}
+
+function beginBlock(fighter, duration) {
+  if (!state.running || fighter.isAttacking || fighter.dodgeTimer > 0 || fighter.isJumping) {
+    return;
+  }
+
+  fighter.isBlocking = true;
+  fighter.blockTimer = duration;
+  fighter.animation = "Block";
+  fighter.frameIndex = 0;
+  fighter.frameTimer = 0;
+  playSound("block");
+}
+
+function beginDodge(fighter, direction) {
+  if (!state.running || fighter.isAttacking || fighter.blockTimer > 0 || fighter.dodgeTimer > 0 || fighter.isJumping) {
+    return;
+  }
+
+  fighter.dodgeTimer = 0.24;
+  fighter.animation = direction > 0 ? "forward" : "backward";
+  fighter.frameIndex = 0;
+  fighter.frameTimer = 0;
+  fighter.x += 85 * direction;
+  clampFighter(fighter);
+  playSound("dodge");
+}
+
+function beginJump(fighter) {
+  if (!state.running || fighter.isAttacking || fighter.blockTimer > 0 || fighter.dodgeTimer > 0 || fighter.isJumping) {
+    return;
+  }
+
+  fighter.velocityY = physics.jumpVelocity;
+  fighter.isJumping = true;
+  fighter.animation = "forward";
+  fighter.frameIndex = 0;
+  fighter.frameTimer = 0;
+  playSound("jump");
+}
+
+function clampFighter(fighter) {
+  fighter.x = Math.max(30, Math.min(arena.width - fighter.width - 30, fighter.x));
+}
+
+function getDistance(attacker, defender) {
+  const attackerFront = attacker.facing === 1 ? attacker.x + attacker.width : attacker.x;
+  const defenderFront = defender.facing === 1 ? defender.x : defender.x + defender.width;
+  return Math.abs(defenderFront - attackerFront);
+}
+
+function dealDamage(attacker, defender) {
+  if (attacker.attackConnected || !state.running) {
+    return;
+  }
+
+  if (getDistance(attacker, defender) > attacker.attackRange) {
+    return;
+  }
+
+  let damage = attacker.attackDamage;
+
+  if (defender.isBlocking) {
+    damage = Math.ceil(damage * 0.35);
+    setStatus(defender.name + " blocked most of the " + attacker.attackName.toLowerCase() + ".");
+    playSound("block");
+  } else {
+    setStatus(attacker.name + " landed a " + attacker.attackName.toLowerCase() + ".");
+    playSound("hit");
+  }
+
+  defender.health = Math.max(0, defender.health - damage);
+  defender.hitFlashTimer = 0.18;
+  attacker.attackConnected = true;
+
+  if (defender.health === 0) {
+    state.running = false;
+    state.winner = attacker.name;
+    setStatus(attacker.name + " wins the round.");
+    playSound("win");
+  }
+}
+
+function updateAttack(fighter, defender, dt) {
+  if (!fighter.isAttacking) {
+    return;
+  }
+
+  fighter.attackTimer -= dt;
+
+  if (fighter.attackTimer <= fighter.attackDuration * 0.55) {
+    dealDamage(fighter, defender);
+  }
+
+  if (fighter.attackTimer <= 0) {
+    fighter.isAttacking = false;
+    fighter.attackName = "";
+    fighter.attackDamage = 0;
+    fighter.attackRange = 0;
+    fighter.animation = "idle";
+    fighter.frameIndex = 0;
+  }
+}
+
+function updateDefense(fighter, dt) {
+  if (fighter.blockTimer > 0) {
+    fighter.blockTimer -= dt;
+
+    if (fighter.blockTimer <= 0) {
+      fighter.blockTimer = 0;
+      fighter.isBlocking = false;
+      fighter.animation = "idle";
+      fighter.frameIndex = 0;
+    }
+  }
+
+  if (fighter.dodgeTimer > 0) {
+    fighter.dodgeTimer -= dt;
+
+    if (fighter.dodgeTimer <= 0) {
+      fighter.dodgeTimer = 0;
+      fighter.animation = "idle";
+      fighter.frameIndex = 0;
+    }
+  }
+
+  if (fighter.hitFlashTimer > 0) {
+    fighter.hitFlashTimer = Math.max(0, fighter.hitFlashTimer - dt);
+  }
+}
+
+function updatePlayer(dt) {
+  if (!state.running || player.isAttacking || player.blockTimer > 0 || player.dodgeTimer > 0) {
+    return;
+  }
+
+  let moved = false;
+
+  if (controls.left) {
+    player.x -= player.speed * dt;
+    if (!player.isJumping) {
+      player.animation = "backward";
+    }
+    moved = true;
+  }
+
+  if (controls.right) {
+    player.x += player.speed * dt;
+    if (!player.isJumping) {
+      player.animation = "forward";
+    }
+    moved = true;
+  }
+
+  if (!moved && !player.isJumping) {
+    player.animation = "idle";
+  }
+
+  clampFighter(player);
+}
+
+function updateCpu(dt) {
+  if (!state.running) {
+    return;
+  }
+
+  state.cpuDecisionTimer -= dt;
+  state.cpuAttackCooldown = Math.max(0, state.cpuAttackCooldown - dt);
+
+  if (cpu.isAttacking || cpu.blockTimer > 0 || cpu.dodgeTimer > 0) {
+    return;
+  }
+
+  const distance = getDistance(cpu, player);
+
+  if (distance > 105) {
+    cpu.x -= cpu.speed * dt;
+    if (!cpu.isJumping) {
+      cpu.animation = "forward";
+    }
+    clampFighter(cpu);
+    return;
+  }
+
+  if (state.cpuDecisionTimer > 0) {
+    cpu.animation = "idle";
+    return;
+  }
+
+  state.cpuDecisionTimer = 0.7 + Math.random() * 0.5;
+
+  if (player.isAttacking && Math.random() < 0.45) {
+    beginBlock(cpu, 0.55);
+    return;
+  }
+
+  if (!cpu.isJumping && Math.random() < 0.12) {
+    beginJump(cpu);
+    return;
+  }
+
+  if (state.cpuAttackCooldown <= 0) {
+    state.cpuAttackCooldown = 0.9;
+
+    if (Math.random() < 0.5) {
+      beginAttack(cpu, "punch");
+    } else {
+      beginAttack(cpu, "kick");
+    }
+    return;
+  }
+
+  cpu.animation = "idle";
+}
+
+function updateJump(fighter, dt) {
+  if (!fighter.isJumping) {
+    return;
+  }
+
+  fighter.velocityY += physics.gravity * dt;
+  fighter.y += fighter.velocityY * dt;
+
+  const groundY = arena.floorY - fighter.height;
+
+  if (fighter.y >= groundY) {
+    fighter.y = groundY;
+    fighter.velocityY = 0;
+    fighter.isJumping = false;
+    fighter.animation = "idle";
+    fighter.frameIndex = 0;
+  }
+}
+
+function drawBackground() {
+  const sky = ctx.createLinearGradient(0, 0, 0, arena.height);
+  sky.addColorStop(0, "rgba(8, 13, 24, 0.08)");
+  sky.addColorStop(1, "rgba(6, 10, 16, 0.52)");
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, arena.width, arena.height);
+
+  ctx.fillStyle = "rgba(10, 15, 22, 0.3)";
+  ctx.fillRect(0, arena.floorY, arena.width, arena.height - arena.floorY);
+
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, arena.floorY + 2);
+  ctx.lineTo(arena.width, arena.floorY + 2);
+  ctx.stroke();
+}
+
+function drawHealthBar(x, y, width, height, health, label, color) {
+  ctx.fillStyle = "rgba(14, 20, 31, 0.75)";
+  ctx.fillRect(x, y, width, height);
+
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, width * (health / 100), height);
+
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.strokeRect(x, y, width, height);
+
+  ctx.fillStyle = "#f8fbff";
+  ctx.font = "bold 16px Arial";
+  ctx.fillText(label + ": " + health, x, y - 10);
+}
+
+function drawFighter(images, fighter) {
+  const frame = getCurrentFrame(images, fighter);
+  const drawX = fighter.x + fighter.width / 2;
+  const drawY = fighter.y;
+
+  ctx.save();
+  ctx.translate(drawX, drawY);
+  ctx.scale(fighter.spriteScale, 1);
+
+  if (fighter.hitFlashTimer > 0) {
+    ctx.shadowColor = "rgba(255, 90, 90, 0.95)";
+    ctx.shadowBlur = 26;
+  }
+
+  ctx.drawImage(frame, -fighter.width / 2, 0, fighter.width, fighter.height);
+
+  if (fighter.isBlocking) {
+    ctx.fillStyle = "rgba(130, 220, 255, 0.2)";
+    ctx.fillRect(-fighter.width / 2, 0, fighter.width, fighter.height);
+  }
+
+  ctx.restore();
+
+  ctx.fillStyle = fighter.tint;
+  ctx.fillRect(fighter.x, fighter.y, fighter.width, fighter.height);
+
+  ctx.fillStyle = "rgba(0, 0, 0, 0.28)";
+  ctx.beginPath();
+  ctx.ellipse(
+    fighter.x + fighter.width / 2,
+    arena.floorY + 10,
+    fighter.width * (fighter.isJumping ? 0.22 : 0.3),
+    fighter.isJumping ? 10 : 14,
+    0,
+    0,
+    Math.PI * 2
+  );
+  ctx.fill();
+}
+
+function drawHud() {
+  drawHealthBar(28, 28, 320, 20, player.health, "Player", "#ffb703");
+  drawHealthBar(arena.width - 348, 28, 320, 20, cpu.health, "CPU", "#4cc9f0");
+
+  ctx.fillStyle = "rgba(11, 18, 32, 0.76)";
+  ctx.fillRect(arena.width / 2 - 130, 18, 260, 42);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+  ctx.strokeRect(arena.width / 2 - 130, 18, 260, 42);
+
+  ctx.fillStyle = "#f8fbff";
+  ctx.font = "bold 18px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(state.running ? "Round Active" : state.winner + " Wins", arena.width / 2, 45);
+  ctx.textAlign = "start";
+}
+
+function render(images) {
+  ctx.clearRect(0, 0, arena.width, arena.height);
+  drawBackground();
+  drawHud();
+  drawFighter(images, cpu);
+  drawFighter(images, player);
+}
+
+function gameLoop(images, timestamp) {
+  if (!state.lastTime) {
+    state.lastTime = timestamp;
+  }
+
+  const dt = Math.min((timestamp - state.lastTime) / 1000, 0.05);
+  state.lastTime = timestamp;
+
+  updatePlayer(dt);
+  updateCpu(dt);
+  updateJump(player, dt);
+  updateJump(cpu, dt);
+  updateAttack(player, cpu, dt);
+  updateAttack(cpu, player, dt);
+  updateDefense(player, dt);
+  updateDefense(cpu, dt);
+  updateAnimation(player, dt);
+  updateAnimation(cpu, dt);
+  render(images);
+
+  requestAnimationFrame((nextTimestamp) => gameLoop(images, nextTimestamp));
+}
+
+function handleAction(action) {
+  switch (action) {
+    case "punch":
+      beginAttack(player, "punch");
+      break;
+    case "kick":
+      beginAttack(player, "kick");
+      break;
+    case "block":
+      beginBlock(player, 0.7);
+      break;
+    case "dodge":
+      beginDodge(player, controls.left ? -1 : 1);
+      break;
+    case "jump":
+      beginJump(player);
+      break;
+  }
+}
+
+function bindControls() {
+  document.getElementById("punch").onclick = () => handleAction("punch");
+  document.getElementById("kick").onclick = () => handleAction("kick");
+  document.getElementById("jump").onclick = () => handleAction("jump");
+  document.getElementById("Block").onclick = () => handleAction("block");
+  document.getElementById("Dodge").onclick = () => handleAction("dodge");
+  document.getElementById("restartRound").onclick = restartRound;
   document.getElementById("backward").onclick = () => {
-    queuedAnimations.push("backward");
+    player.x -= 36;
+    player.animation = "backward";
+    clampFighter(player);
   };
-
   document.getElementById("forward").onclick = () => {
-    queuedAnimations.push("forward");
+    player.x += 36;
+    player.animation = "forward";
+    clampFighter(player);
   };
 
-  document.getElementById("Block").onclick = () => {
-    queuedAnimations.push("Block");
-  };
+  document.addEventListener("keydown", (event) => {
+    if (event.repeat) {
+      return;
+    }
 
-  document.getElementById("Dodge").onclick = () => {
-    queuedAnimations.push("backward");
-  };
+    switch (event.key) {
+      case "ArrowLeft":
+        controls.left = true;
+        break;
+      case "ArrowRight":
+        controls.right = true;
+        break;
+      case "a":
+      case "A":
+        handleAction("punch");
+        break;
+      case "ArrowUp":
+      case "w":
+      case "W":
+        handleAction("jump");
+        break;
+      case "s":
+      case "S":
+        handleAction("kick");
+        break;
+      case "d":
+      case "D":
+        handleAction("block");
+        break;
+      case " ":
+        event.preventDefault();
+        handleAction("dodge");
+        break;
+      case "r":
+      case "R":
+        restartRound();
+        break;
+    }
+  });
 
   document.addEventListener("keyup", (event) => {
     switch (event.key) {
       case "ArrowLeft":
-        queuedAnimations.push("backward");
+        controls.left = false;
         break;
       case "ArrowRight":
-        queuedAnimations.push("forward");
+        controls.right = false;
         break;
-      case "ArrowUp":
-        queuedAnimations.push("kick");
-        break;
-      case "ArrowDown":
-        queuedAnimations.push("Block");
-        break;
-      case "a":
-      case "A":
-        queuedAnimations.push("punch");
+      case "d":
+      case "D":
+        player.blockTimer = 0;
+        player.isBlocking = false;
+        if (!player.isAttacking && player.dodgeTimer <= 0) {
+          player.animation = "idle";
+        }
         break;
     }
   });
+}
+
+loadImages((images) => {
+  Object.assign(imageCache, images);
+  bindControls();
+  setStatus("Fight started. Close the distance and land a hit.");
+  requestAnimationFrame((timestamp) => gameLoop(imageCache, timestamp));
 });
