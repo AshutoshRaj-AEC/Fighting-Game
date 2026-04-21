@@ -6,11 +6,14 @@
   <title>Canvas Fighting Game</title>
   <style>
     :root {
-      --panel: rgba(11, 18, 32, 0.82);
-      --border: rgba(255, 255, 255, 0.2);
+      --panel: rgba(11, 18, 32, 0.84);
+      --panel-strong: rgba(7, 13, 23, 0.92);
+      --border: rgba(255, 255, 255, 0.18);
       --text: #f4f7fb;
-      --accent: #ffb703;
-      --accent-2: #8ecae6;
+      --muted: #d7e2f2;
+      --gold: #ffb703;
+      --sky: #8ecae6;
+      --danger: #ff7b7b;
     }
 
     * {
@@ -26,7 +29,7 @@
       gap: 16px;
       padding: 20px;
       background:
-        linear-gradient(rgba(8, 12, 20, 0.28), rgba(8, 12, 20, 0.75)),
+        linear-gradient(rgba(8, 12, 20, 0.22), rgba(8, 12, 20, 0.78)),
         url("images/background.jpg") center / cover no-repeat;
       font-family: Arial, sans-serif;
       color: var(--text);
@@ -34,12 +37,13 @@
 
     .title {
       text-align: center;
-      max-width: 860px;
-      padding: 16px 18px;
+      max-width: 920px;
+      padding: 18px 22px;
       border: 1px solid var(--border);
       background: var(--panel);
-      backdrop-filter: blur(6px);
-      border-radius: 16px;
+      backdrop-filter: blur(8px);
+      border-radius: 18px;
+      box-shadow: 0 24px 40px rgba(0, 0, 0, 0.24);
     }
 
     h1,
@@ -48,34 +52,100 @@
     }
 
     h1 {
-      font-size: clamp(28px, 4vw, 44px);
+      font-size: clamp(28px, 4vw, 48px);
       letter-spacing: 0.08em;
     }
 
     p {
-      margin-top: 8px;
-      color: #d9e2f2;
-      line-height: 1.5;
+      margin-top: 10px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .arena-shell {
+      position: relative;
+      width: min(100%, 920px);
     }
 
     canvas {
-      width: min(100%, 920px);
+      width: 100%;
       height: auto;
-      border: 2px solid rgba(255, 255, 255, 0.3);
+      display: block;
+      border: 2px solid rgba(255, 255, 255, 0.28);
       border-radius: 18px;
       box-shadow: 0 22px 45px rgba(0, 0, 0, 0.35);
       background: rgba(255, 255, 255, 0.04);
     }
 
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      border-radius: 18px;
+      background: linear-gradient(rgba(8, 12, 20, 0.48), rgba(8, 12, 20, 0.84));
+      backdrop-filter: blur(8px);
+    }
+
+    .overlay.visible {
+      display: flex;
+    }
+
+    .overlay-card {
+      width: min(100%, 560px);
+      padding: 26px 28px;
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      background: var(--panel-strong);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+      text-align: center;
+    }
+
+    .overlay-kicker {
+      margin-bottom: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--sky);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .overlay-card h2 {
+      margin: 0;
+      font-size: clamp(26px, 4vw, 42px);
+    }
+
+    .overlay-card p {
+      margin-top: 12px;
+      color: var(--muted);
+    }
+
+    .overlay-actions {
+      margin-top: 18px;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .overlay-note {
+      margin-top: 14px;
+      font-size: 14px;
+      color: #c6d5e9;
+    }
+
     .controls {
       width: min(100%, 920px);
       display: grid;
-      gap: 12px;
-      padding: 16px;
+      gap: 14px;
+      padding: 16px 18px;
       border: 1px solid var(--border);
       background: var(--panel);
-      backdrop-filter: blur(6px);
-      border-radius: 16px;
+      backdrop-filter: blur(8px);
+      border-radius: 18px;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.2);
     }
 
     .buttons {
@@ -93,27 +163,82 @@
       font-weight: 700;
       cursor: pointer;
       color: #07111d;
-      background: linear-gradient(135deg, var(--accent), #ffd166);
+      background: linear-gradient(135deg, var(--gold), #ffd166);
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 10px 18px rgba(0, 0, 0, 0.16);
+    }
+
+    button:hover {
+      transform: translateY(-1px);
     }
 
     button.secondary {
-      background: linear-gradient(135deg, var(--accent-2), #caf0f8);
+      background: linear-gradient(135deg, var(--sky), #caf0f8);
+    }
+
+    button.danger {
+      background: linear-gradient(135deg, #ff8a8a, #ffc1a6);
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .status-chip {
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.06);
+      font-size: 13px;
+      color: #dce7f5;
     }
 
     .hud-copy {
+      flex: 1;
+      min-width: 240px;
       text-align: center;
-      color: #e6edf8;
-      font-size: 14px;
+      color: #eef4fd;
+      font-size: 15px;
     }
   </style>
 </head>
 <body>
   <section class="title">
     <h1>Canvas Fighting Game</h1>
-    <p>Prototype v0.6: move, jump, punch, kick, block, dodge, and fight a simple CPU opponent across multiple rounds with animated pet companions. Use Arrow keys to move, <strong>W</strong> or <strong>Arrow Up</strong> to jump, <strong>A</strong> to punch, <strong>S</strong> to kick, <strong>D</strong> to block, and <strong>Space</strong> to dodge.</p>
+    <p>Prototype v0.7: a fuller game flow with a start screen, pause/resume, polished HUD, and match-over screen. Use Arrow keys to move, <strong>W</strong> or <strong>Arrow Up</strong> to jump, <strong>A</strong> to punch, <strong>S</strong> to kick, <strong>D</strong> to block, <strong>Space</strong> to dodge, and <strong>P</strong> to pause.</p>
   </section>
 
-  <canvas id="myCanvas" width="920" height="460"></canvas>
+  <section class="arena-shell">
+    <canvas id="myCanvas" width="920" height="460"></canvas>
+
+    <div class="overlay visible" id="startOverlay">
+      <div class="overlay-card">
+        <div class="overlay-kicker">Arena Intro</div>
+        <h2>Ready For The First Round?</h2>
+        <p>Step into the arena with your Solar Eagle companion and fight the Frost Owl CPU across a best-of-five match.</p>
+        <div class="overlay-actions">
+          <button id="startGame">Start Match</button>
+        </div>
+        <div class="overlay-note">First to 3 round wins takes the match.</div>
+      </div>
+    </div>
+
+    <div class="overlay" id="matchOverlay">
+      <div class="overlay-card">
+        <div class="overlay-kicker" id="matchOverlayKicker">Match Over</div>
+        <h2 id="matchOverlayTitle">Player Wins</h2>
+        <p id="matchOverlayText">The arena champion stands tall.</p>
+        <div class="overlay-actions">
+          <button id="restartMatchButton">Restart Match</button>
+          <button id="closeOverlayButton" class="secondary">Close Overlay</button>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <section class="controls">
     <div class="buttons">
@@ -124,9 +249,15 @@
       <button id="forward" class="secondary">Step Forward</button>
       <button id="Block">Block</button>
       <button id="Dodge" class="secondary">Dodge</button>
+      <button id="pauseGame" class="secondary">Pause</button>
       <button id="restartRound" class="secondary">Restart Round</button>
+      <button id="restartMatchInline" class="danger">Restart Match</button>
     </div>
-    <div class="hud-copy" id="statusText">Fight started. Close the distance and land a hit.</div>
+    <div class="status-row">
+      <div class="status-chip" id="gameStateLabel">Waiting to start</div>
+      <div class="hud-copy" id="statusText">Press Start Match to enter the arena.</div>
+      <div class="status-chip" id="controlsHint">Best of 5</div>
+    </div>
   </section>
 
   <script src="Canvas.js"></script>

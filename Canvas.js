@@ -1,6 +1,14 @@
 const canvas = document.getElementById("myCanvas");
 const ctx = canvas.getContext("2d");
 const statusText = document.getElementById("statusText");
+const gameStateLabel = document.getElementById("gameStateLabel");
+const controlsHint = document.getElementById("controlsHint");
+const startOverlay = document.getElementById("startOverlay");
+const matchOverlay = document.getElementById("matchOverlay");
+const matchOverlayKicker = document.getElementById("matchOverlayKicker");
+const matchOverlayTitle = document.getElementById("matchOverlayTitle");
+const matchOverlayText = document.getElementById("matchOverlayText");
+const pauseButton = document.getElementById("pauseGame");
 
 const arena = {
   width: canvas.width,
@@ -21,11 +29,12 @@ const imageCache = {};
 const controls = {
   left: false,
   right: false,
-  block: false,
 };
 
 const state = {
-  running: true,
+  running: false,
+  paused: false,
+  phase: "pre_match",
   winner: "",
   lastTime: 0,
   cpuDecisionTimer: 0,
@@ -168,6 +177,57 @@ function setStatus(message) {
   statusText.textContent = message;
 }
 
+function setUiState() {
+  const startVisible = state.phase === "pre_match";
+  const matchVisible = state.phase === "match_over";
+
+  startOverlay.classList.toggle("visible", startVisible);
+  matchOverlay.classList.toggle("visible", matchVisible);
+
+  if (state.phase === "pre_match") {
+    gameStateLabel.textContent = "Waiting to start";
+    controlsHint.textContent = "Best of 5";
+    pauseButton.textContent = "Pause";
+    return;
+  }
+
+  if (state.phase === "paused") {
+    gameStateLabel.textContent = "Paused";
+    controlsHint.textContent = "Press P to resume";
+    pauseButton.textContent = "Resume";
+    return;
+  }
+
+  if (state.phase === "match_over") {
+    gameStateLabel.textContent = "Match over";
+    controlsHint.textContent = "Restart to play again";
+    pauseButton.textContent = "Pause";
+    return;
+  }
+
+  if (!state.running && state.phase === "playing") {
+    gameStateLabel.textContent = "Round finished";
+    controlsHint.textContent = "Press R for next round";
+    pauseButton.textContent = "Pause";
+    return;
+  }
+
+  gameStateLabel.textContent = "Round active";
+  controlsHint.textContent = "P pauses";
+  pauseButton.textContent = "Pause";
+}
+
+function openMatchOverlay(title, description) {
+  matchOverlayKicker.textContent = "Match Over";
+  matchOverlayTitle.textContent = title;
+  matchOverlayText.textContent = description;
+  state.phase = "match_over";
+  state.matchOver = true;
+  state.running = false;
+  state.paused = false;
+  setUiState();
+}
+
 function getAudioContext() {
   if (!audioContext) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -249,7 +309,7 @@ function resetFighter(fighter, defaults) {
   fighter.hitFlashTimer = 0;
   fighter.velocityY = 0;
   fighter.isJumping = false;
-  fighter.pet.x = fighter.x + fighter.width / 2 - (fighter.facing * 96);
+  fighter.pet.x = fighter.x + fighter.width / 2 - fighter.facing * 96;
   fighter.pet.y = fighter.y - 70;
   fighter.pet.bobTimer = Math.random() * Math.PI * 2;
 }
@@ -259,13 +319,16 @@ function restartRound() {
   resetFighter(cpu, fighterDefaults.cpu);
   controls.left = false;
   controls.right = false;
-  controls.block = false;
   state.running = true;
+  state.paused = false;
+  state.phase = "playing";
   state.winner = "";
   state.cpuDecisionTimer = 0;
   state.cpuAttackCooldown = 0;
+  state.lastTime = 0;
   setStatus("Round " + state.roundNumber + " started. Step in and throw the first hit.");
   playSound("restart");
+  setUiState();
 }
 
 function restartMatch() {
@@ -273,8 +336,36 @@ function restartMatch() {
   state.playerRoundsWon = 0;
   state.cpuRoundsWon = 0;
   state.matchOver = false;
+  matchOverlay.classList.remove("visible");
   restartRound();
   setStatus("Match restarted. Round 1 is live.");
+}
+
+function startMatch() {
+  state.roundNumber = 1;
+  state.playerRoundsWon = 0;
+  state.cpuRoundsWon = 0;
+  state.matchOver = false;
+  restartRound();
+}
+
+function togglePause() {
+  if (state.phase === "pre_match" || state.phase === "match_over" || !state.running) {
+    return;
+  }
+
+  state.paused = !state.paused;
+  state.phase = state.paused ? "paused" : "playing";
+  setStatus(state.paused ? "Game paused. Press P or Pause to resume." : "Back in the fight.");
+  setUiState();
+}
+
+function closeOverlay() {
+  if (state.phase !== "match_over") {
+    return;
+  }
+
+  matchOverlay.classList.remove("visible");
 }
 
 function getCurrentFrame(images, fighter) {
@@ -293,7 +384,7 @@ function updateAnimation(fighter, dt) {
 }
 
 function beginAttack(fighter, type) {
-  if (!state.running || fighter.isAttacking || fighter.dodgeTimer > 0 || fighter.blockTimer > 0 || fighter.isJumping) {
+  if (!state.running || state.paused || fighter.isAttacking || fighter.dodgeTimer > 0 || fighter.blockTimer > 0 || fighter.isJumping) {
     return;
   }
 
@@ -320,7 +411,7 @@ function beginAttack(fighter, type) {
 }
 
 function beginBlock(fighter, duration) {
-  if (!state.running || fighter.isAttacking || fighter.dodgeTimer > 0 || fighter.isJumping) {
+  if (!state.running || state.paused || fighter.isAttacking || fighter.dodgeTimer > 0 || fighter.isJumping) {
     return;
   }
 
@@ -333,7 +424,7 @@ function beginBlock(fighter, duration) {
 }
 
 function beginDodge(fighter, direction) {
-  if (!state.running || fighter.isAttacking || fighter.blockTimer > 0 || fighter.dodgeTimer > 0 || fighter.isJumping) {
+  if (!state.running || state.paused || fighter.isAttacking || fighter.blockTimer > 0 || fighter.dodgeTimer > 0 || fighter.isJumping) {
     return;
   }
 
@@ -347,7 +438,7 @@ function beginDodge(fighter, direction) {
 }
 
 function beginJump(fighter) {
-  if (!state.running || fighter.isAttacking || fighter.blockTimer > 0 || fighter.dodgeTimer > 0 || fighter.isJumping) {
+  if (!state.running || state.paused || fighter.isAttacking || fighter.blockTimer > 0 || fighter.dodgeTimer > 0 || fighter.isJumping) {
     return;
   }
 
@@ -370,7 +461,7 @@ function getDistance(attacker, defender) {
 }
 
 function dealDamage(attacker, defender) {
-  if (attacker.attackConnected || !state.running) {
+  if (attacker.attackConnected || !state.running || state.paused) {
     return;
   }
 
@@ -403,16 +494,16 @@ function dealDamage(attacker, defender) {
     }
 
     if (state.playerRoundsWon >= state.roundsToWin || state.cpuRoundsWon >= state.roundsToWin) {
-      state.matchOver = true;
-      setStatus(attacker.name + " wins the match. Press R to restart the full match.");
+      openMatchOverlay(
+        attacker.name + " Wins The Match",
+        "Final score: " + state.playerRoundsWon + " - " + state.cpuRoundsWon + ". Restart the match to fight again."
+      );
+      setStatus(attacker.name + " wins the match.");
     } else {
       state.roundNumber += 1;
-      setStatus(
-        attacker.name +
-        " wins the round. Press R to start round " +
-        state.roundNumber +
-        "."
-      );
+      state.phase = "playing";
+      setStatus(attacker.name + " wins the round. Press R to start round " + state.roundNumber + ".");
+      setUiState();
     }
     playSound("win");
   }
@@ -467,7 +558,7 @@ function updateDefense(fighter, dt) {
 }
 
 function updatePlayer(dt) {
-  if (!state.running || player.isAttacking || player.blockTimer > 0 || player.dodgeTimer > 0) {
+  if (!state.running || state.paused || player.isAttacking || player.blockTimer > 0 || player.dodgeTimer > 0) {
     return;
   }
 
@@ -497,7 +588,7 @@ function updatePlayer(dt) {
 }
 
 function updateCpu(dt) {
-  if (!state.running) {
+  if (!state.running || state.paused) {
     return;
   }
 
@@ -587,6 +678,12 @@ function drawBackground() {
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, arena.width, arena.height);
 
+  const shine = ctx.createRadialGradient(arena.width * 0.5, 120, 10, arena.width * 0.5, 140, 260);
+  shine.addColorStop(0, "rgba(255, 255, 255, 0.08)");
+  shine.addColorStop(1, "rgba(255, 255, 255, 0)");
+  ctx.fillStyle = shine;
+  ctx.fillRect(0, 0, arena.width, arena.height);
+
   ctx.fillStyle = "rgba(10, 15, 22, 0.3)";
   ctx.fillRect(0, arena.floorY, arena.width, arena.height - arena.floorY);
 
@@ -598,8 +695,8 @@ function drawBackground() {
   ctx.stroke();
 }
 
-function drawHealthBar(x, y, width, height, health, label, color) {
-  ctx.fillStyle = "rgba(14, 20, 31, 0.75)";
+function drawHealthBar(x, y, width, height, health, label, color, accentText) {
+  ctx.fillStyle = "rgba(14, 20, 31, 0.72)";
   ctx.fillRect(x, y, width, height);
 
   ctx.fillStyle = color;
@@ -610,7 +707,11 @@ function drawHealthBar(x, y, width, height, health, label, color) {
 
   ctx.fillStyle = "#f8fbff";
   ctx.font = "bold 16px Arial";
-  ctx.fillText(label + ": " + health, x, y - 10);
+  ctx.fillText(label + ": " + health, x, y - 12);
+
+  ctx.fillStyle = accentText;
+  ctx.font = "bold 12px Arial";
+  ctx.fillText("Pet: " + (label === "Player" ? player.pet.name : cpu.pet.name), x, y + height + 18);
 }
 
 function drawPet(fighter) {
@@ -631,63 +732,33 @@ function drawPet(fighter) {
   ctx.shadowBlur = 0;
   ctx.fillStyle = pet.accent;
 
-  if (pet.type === "fox") {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 18, 14, 0, 0, Math.PI * 2);
-    ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(0, 0, 16, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-    ctx.beginPath();
-    ctx.moveTo(-12, -10);
-    ctx.lineTo(-4, -24);
-    ctx.lineTo(1, -8);
-    ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-12, -4);
+  ctx.quadraticCurveTo(-28, 8, -14, 12);
+  ctx.quadraticCurveTo(-7, 6, -8, -1);
+  ctx.fill();
 
-    ctx.beginPath();
-    ctx.moveTo(12, -10);
-    ctx.lineTo(4, -24);
-    ctx.lineTo(-1, -8);
-    ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(12, -4);
+  ctx.quadraticCurveTo(28, 8, 14, 12);
+  ctx.quadraticCurveTo(7, 6, 8, -1);
+  ctx.fill();
 
-    ctx.fillStyle = "#fff6db";
-    ctx.beginPath();
-    ctx.ellipse(0, 5, 9, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
+  ctx.fillStyle = pet.type === "eagle" ? "#fff5d6" : "#edfaff";
+  ctx.beginPath();
+  ctx.ellipse(0, 4, 9, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
 
-    ctx.fillStyle = "#ff9f1c";
-    ctx.beginPath();
-    ctx.moveTo(14, 6);
-    ctx.quadraticCurveTo(29, -2, 27, 12);
-    ctx.quadraticCurveTo(17, 16, 9, 10);
-    ctx.fill();
-  } else {
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 16, 18, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(-12, -4);
-    ctx.quadraticCurveTo(-28, 8, -14, 12);
-    ctx.quadraticCurveTo(-7, 6, -8, -1);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(12, -4);
-    ctx.quadraticCurveTo(28, 8, 14, 12);
-    ctx.quadraticCurveTo(7, 6, 8, -1);
-    ctx.fill();
-
-    ctx.fillStyle = pet.type === "eagle" ? "#fff5d6" : "#edfaff";
-    ctx.beginPath();
-    ctx.ellipse(0, 4, 9, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = pet.type === "eagle" ? "#f77f00" : "#ffb703";
-    ctx.beginPath();
-    ctx.moveTo(0, 6);
-    ctx.lineTo(-5, 10);
-    ctx.lineTo(5, 10);
-    ctx.fill();
-  }
+  ctx.fillStyle = pet.type === "eagle" ? "#f77f00" : "#ffb703";
+  ctx.beginPath();
+  ctx.moveTo(0, 6);
+  ctx.lineTo(-5, 10);
+  ctx.lineTo(5, 10);
+  ctx.fill();
 
   ctx.fillStyle = blink ? "#07111d" : "#0f1d33";
   ctx.beginPath();
@@ -695,7 +766,7 @@ function drawPet(fighter) {
   ctx.arc(5, -1, 2, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+  ctx.fillStyle = "rgba(255, 255, 255, 0.86)";
   ctx.font = "bold 11px Arial";
   ctx.textAlign = "center";
   ctx.fillText(pet.name, 0, -30);
@@ -744,33 +815,67 @@ function drawFighter(images, fighter) {
 }
 
 function drawHud() {
-  drawHealthBar(28, 28, 320, 20, player.health, "Player", "#ffb703");
-  drawHealthBar(arena.width - 348, 28, 320, 20, cpu.health, "CPU", "#4cc9f0");
+  ctx.fillStyle = "rgba(8, 13, 23, 0.62)";
+  ctx.fillRect(18, 18, arena.width - 36, 74);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.strokeRect(18, 18, arena.width - 36, 74);
 
-  ctx.fillStyle = "rgba(11, 18, 32, 0.76)";
-  ctx.fillRect(arena.width / 2 - 130, 18, 260, 42);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
-  ctx.strokeRect(arena.width / 2 - 130, 18, 260, 42);
+  drawHealthBar(36, 42, 280, 18, player.health, "Player", "#ffb703", "#ffe7a3");
+  drawHealthBar(arena.width - 316, 42, 280, 18, cpu.health, "CPU", "#4cc9f0", "#d2f5ff");
+
+  ctx.fillStyle = "rgba(13, 20, 33, 0.9)";
+  ctx.fillRect(arena.width / 2 - 122, 30, 244, 42);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+  ctx.strokeRect(arena.width / 2 - 122, 30, 244, 42);
 
   ctx.fillStyle = "#f8fbff";
-  ctx.font = "bold 18px Arial";
+  ctx.font = "bold 20px Arial";
   ctx.textAlign = "center";
-  let hudTitle = "Round " + state.roundNumber;
 
-  if (state.matchOver) {
-    hudTitle = state.winner + " Wins Match";
-  } else if (!state.running && state.winner) {
+  let hudTitle = "Round " + state.roundNumber;
+  if (state.paused) {
+    hudTitle = "Paused";
+  } else if (!state.running && !state.matchOver && state.winner) {
     hudTitle = state.winner + " Won Round";
+  } else if (state.matchOver) {
+    hudTitle = state.winner + " Wins Match";
   }
 
-  ctx.fillText(hudTitle, arena.width / 2, 45);
+  ctx.fillText(hudTitle, arena.width / 2, 57);
+
+  ctx.font = "bold 14px Arial";
+  ctx.fillStyle = "#dce7f5";
+  ctx.fillText("First to " + state.roundsToWin, arena.width / 2, 80);
+
   ctx.textAlign = "start";
+  ctx.fillStyle = "#f8fbff";
+  ctx.font = "bold 14px Arial";
+  ctx.fillText("Rounds: " + state.playerRoundsWon, 36, 86);
+  ctx.textAlign = "right";
+  ctx.fillText("Rounds: " + state.cpuRoundsWon, arena.width - 36, 86);
+  ctx.textAlign = "start";
+}
+
+function drawPausedOverlay() {
+  if (!state.paused) {
+    return;
+  }
+
+  ctx.fillStyle = "rgba(5, 10, 17, 0.45)";
+  ctx.fillRect(0, 0, arena.width, arena.height);
+
+  ctx.fillStyle = "rgba(7, 13, 23, 0.88)";
+  ctx.fillRect(arena.width / 2 - 170, arena.height / 2 - 54, 340, 108);
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+  ctx.strokeRect(arena.width / 2 - 170, arena.height / 2 - 54, 340, 108);
 
   ctx.fillStyle = "#f8fbff";
-  ctx.font = "bold 15px Arial";
-  ctx.fillText("Rounds: " + state.playerRoundsWon, 28, 72);
-  ctx.textAlign = "right";
-  ctx.fillText("Rounds: " + state.cpuRoundsWon, arena.width - 28, 72);
+  ctx.font = "bold 28px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Game Paused", arena.width / 2, arena.height / 2 - 6);
+  ctx.font = "15px Arial";
+  ctx.fillStyle = "#d6e2f2";
+  ctx.fillText("Press P or Resume to jump back into the round.", arena.width / 2, arena.height / 2 + 24);
   ctx.textAlign = "start";
 }
 
@@ -782,6 +887,7 @@ function render(images) {
   drawFighter(images, player);
   drawPet(cpu);
   drawPet(player);
+  drawPausedOverlay();
 }
 
 function gameLoop(images, timestamp) {
@@ -792,20 +898,25 @@ function gameLoop(images, timestamp) {
   const dt = Math.min((timestamp - state.lastTime) / 1000, 0.05);
   state.lastTime = timestamp;
 
-  updatePlayer(dt);
-  updateCpu(dt);
-  updateJump(player, dt);
-  updateJump(cpu, dt);
-  updatePet(player, dt);
-  updatePet(cpu, dt);
-  updateAttack(player, cpu, dt);
-  updateAttack(cpu, player, dt);
-  updateDefense(player, dt);
-  updateDefense(cpu, dt);
-  updateAnimation(player, dt);
-  updateAnimation(cpu, dt);
-  render(images);
+  if (state.running && !state.paused) {
+    updatePlayer(dt);
+    updateCpu(dt);
+    updateJump(player, dt);
+    updateJump(cpu, dt);
+    updatePet(player, dt);
+    updatePet(cpu, dt);
+    updateAttack(player, cpu, dt);
+    updateAttack(cpu, player, dt);
+    updateDefense(player, dt);
+    updateDefense(cpu, dt);
+    updateAnimation(player, dt);
+    updateAnimation(cpu, dt);
+  } else {
+    updatePet(player, dt);
+    updatePet(cpu, dt);
+  }
 
+  render(images);
   requestAnimationFrame((nextTimestamp) => gameLoop(images, nextTimestamp));
 }
 
@@ -830,18 +941,41 @@ function handleAction(action) {
 }
 
 function bindControls() {
+  document.getElementById("startGame").onclick = startMatch;
+  document.getElementById("restartMatchButton").onclick = restartMatch;
+  document.getElementById("closeOverlayButton").onclick = closeOverlay;
+  document.getElementById("restartMatchInline").onclick = restartMatch;
+  document.getElementById("pauseGame").onclick = togglePause;
   document.getElementById("punch").onclick = () => handleAction("punch");
   document.getElementById("kick").onclick = () => handleAction("kick");
   document.getElementById("jump").onclick = () => handleAction("jump");
   document.getElementById("Block").onclick = () => handleAction("block");
   document.getElementById("Dodge").onclick = () => handleAction("dodge");
-  document.getElementById("restartRound").onclick = restartRound;
+  document.getElementById("restartRound").onclick = () => {
+    if (state.phase === "pre_match") {
+      startMatch();
+      return;
+    }
+
+    if (state.phase === "match_over") {
+      restartMatch();
+      return;
+    }
+
+    restartRound();
+  };
   document.getElementById("backward").onclick = () => {
+    if (!state.running || state.paused) {
+      return;
+    }
     player.x -= 36;
     player.animation = "backward";
     clampFighter(player);
   };
   document.getElementById("forward").onclick = () => {
+    if (!state.running || state.paused) {
+      return;
+    }
     player.x += 36;
     player.animation = "forward";
     clampFighter(player);
@@ -882,11 +1016,17 @@ function bindControls() {
         break;
       case "r":
       case "R":
-        if (state.matchOver) {
+        if (state.phase === "match_over") {
           restartMatch();
+        } else if (state.phase === "pre_match") {
+          startMatch();
         } else {
           restartRound();
         }
+        break;
+      case "p":
+      case "P":
+        togglePause();
         break;
     }
   });
@@ -914,6 +1054,7 @@ function bindControls() {
 loadImages((images) => {
   Object.assign(imageCache, images);
   bindControls();
-  setStatus("Round 1 started. Close the distance and land a hit.");
+  setStatus("Press Start Match to enter the arena.");
+  setUiState();
   requestAnimationFrame((timestamp) => gameLoop(imageCache, timestamp));
 });
