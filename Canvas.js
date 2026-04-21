@@ -30,6 +30,11 @@ const state = {
   lastTime: 0,
   cpuDecisionTimer: 0,
   cpuAttackCooldown: 0,
+  roundNumber: 1,
+  playerRoundsWon: 0,
+  cpuRoundsWon: 0,
+  roundsToWin: 3,
+  matchOver: false,
 };
 
 const physics = {
@@ -113,6 +118,15 @@ function createFighter(config) {
     spriteScale: config.spriteScale,
     velocityY: 0,
     isJumping: false,
+    pet: {
+      name: config.pet.name,
+      type: config.pet.type,
+      accent: config.pet.accent,
+      glow: config.pet.glow,
+      x: config.x - 40,
+      y: arena.floorY - config.height - 50,
+      bobTimer: Math.random() * Math.PI * 2,
+    },
   };
 }
 
@@ -125,6 +139,12 @@ const player = createFighter({
   speed: 240,
   tint: "rgba(255, 196, 61, 0.18)",
   spriteScale: 1,
+  pet: {
+    name: "Solar Eagle",
+    type: "eagle",
+    accent: "#ffd166",
+    glow: "rgba(255, 189, 92, 0.32)",
+  },
 });
 
 const cpu = createFighter({
@@ -136,6 +156,12 @@ const cpu = createFighter({
   speed: 180,
   tint: "rgba(70, 160, 255, 0.18)",
   spriteScale: -1,
+  pet: {
+    name: "Frost Owl",
+    type: "owl",
+    accent: "#90e0ef",
+    glow: "rgba(126, 214, 223, 0.3)",
+  },
 });
 
 function setStatus(message) {
@@ -223,6 +249,9 @@ function resetFighter(fighter, defaults) {
   fighter.hitFlashTimer = 0;
   fighter.velocityY = 0;
   fighter.isJumping = false;
+  fighter.pet.x = fighter.x + fighter.width / 2 - (fighter.facing * 96);
+  fighter.pet.y = fighter.y - 70;
+  fighter.pet.bobTimer = Math.random() * Math.PI * 2;
 }
 
 function restartRound() {
@@ -235,8 +264,17 @@ function restartRound() {
   state.winner = "";
   state.cpuDecisionTimer = 0;
   state.cpuAttackCooldown = 0;
-  setStatus("New round started. Step in and throw the first hit.");
+  setStatus("Round " + state.roundNumber + " started. Step in and throw the first hit.");
   playSound("restart");
+}
+
+function restartMatch() {
+  state.roundNumber = 1;
+  state.playerRoundsWon = 0;
+  state.cpuRoundsWon = 0;
+  state.matchOver = false;
+  restartRound();
+  setStatus("Match restarted. Round 1 is live.");
 }
 
 function getCurrentFrame(images, fighter) {
@@ -358,7 +396,24 @@ function dealDamage(attacker, defender) {
   if (defender.health === 0) {
     state.running = false;
     state.winner = attacker.name;
-    setStatus(attacker.name + " wins the round.");
+    if (attacker === player) {
+      state.playerRoundsWon += 1;
+    } else {
+      state.cpuRoundsWon += 1;
+    }
+
+    if (state.playerRoundsWon >= state.roundsToWin || state.cpuRoundsWon >= state.roundsToWin) {
+      state.matchOver = true;
+      setStatus(attacker.name + " wins the match. Press R to restart the full match.");
+    } else {
+      state.roundNumber += 1;
+      setStatus(
+        attacker.name +
+        " wins the round. Press R to start round " +
+        state.roundNumber +
+        "."
+      );
+    }
     playSound("win");
   }
 }
@@ -514,6 +569,17 @@ function updateJump(fighter, dt) {
   }
 }
 
+function updatePet(fighter, dt) {
+  const pet = fighter.pet;
+  const baseX = fighter.x + fighter.width / 2 - fighter.facing * 104;
+  const baseY = fighter.y - 62;
+  const bobOffset = Math.sin(pet.bobTimer) * 10;
+
+  pet.bobTimer += dt * 3.2;
+  pet.x += (baseX - pet.x) * Math.min(1, dt * 7);
+  pet.y += (baseY + bobOffset - pet.y) * Math.min(1, dt * 7);
+}
+
 function drawBackground() {
   const sky = ctx.createLinearGradient(0, 0, 0, arena.height);
   sky.addColorStop(0, "rgba(8, 13, 24, 0.08)");
@@ -545,6 +611,96 @@ function drawHealthBar(x, y, width, height, health, label, color) {
   ctx.fillStyle = "#f8fbff";
   ctx.font = "bold 16px Arial";
   ctx.fillText(label + ": " + health, x, y - 10);
+}
+
+function drawPet(fighter) {
+  const pet = fighter.pet;
+  const blink = Math.sin(pet.bobTimer * 1.7) > 0.92;
+
+  ctx.save();
+  ctx.translate(pet.x, pet.y);
+
+  ctx.shadowColor = pet.glow;
+  ctx.shadowBlur = 18;
+
+  ctx.fillStyle = pet.glow;
+  ctx.beginPath();
+  ctx.ellipse(0, 18, 24, 10, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = pet.accent;
+
+  if (pet.type === "fox") {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(-12, -10);
+    ctx.lineTo(-4, -24);
+    ctx.lineTo(1, -8);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(12, -10);
+    ctx.lineTo(4, -24);
+    ctx.lineTo(-1, -8);
+    ctx.fill();
+
+    ctx.fillStyle = "#fff6db";
+    ctx.beginPath();
+    ctx.ellipse(0, 5, 9, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#ff9f1c";
+    ctx.beginPath();
+    ctx.moveTo(14, 6);
+    ctx.quadraticCurveTo(29, -2, 27, 12);
+    ctx.quadraticCurveTo(17, 16, 9, 10);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 16, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(-12, -4);
+    ctx.quadraticCurveTo(-28, 8, -14, 12);
+    ctx.quadraticCurveTo(-7, 6, -8, -1);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(12, -4);
+    ctx.quadraticCurveTo(28, 8, 14, 12);
+    ctx.quadraticCurveTo(7, 6, 8, -1);
+    ctx.fill();
+
+    ctx.fillStyle = pet.type === "eagle" ? "#fff5d6" : "#edfaff";
+    ctx.beginPath();
+    ctx.ellipse(0, 4, 9, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = pet.type === "eagle" ? "#f77f00" : "#ffb703";
+    ctx.beginPath();
+    ctx.moveTo(0, 6);
+    ctx.lineTo(-5, 10);
+    ctx.lineTo(5, 10);
+    ctx.fill();
+  }
+
+  ctx.fillStyle = blink ? "#07111d" : "#0f1d33";
+  ctx.beginPath();
+  ctx.arc(-5, -1, 2, 0, Math.PI * 2);
+  ctx.arc(5, -1, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+  ctx.font = "bold 11px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(pet.name, 0, -30);
+
+  ctx.restore();
 }
 
 function drawFighter(images, fighter) {
@@ -599,7 +755,22 @@ function drawHud() {
   ctx.fillStyle = "#f8fbff";
   ctx.font = "bold 18px Arial";
   ctx.textAlign = "center";
-  ctx.fillText(state.running ? "Round Active" : state.winner + " Wins", arena.width / 2, 45);
+  let hudTitle = "Round " + state.roundNumber;
+
+  if (state.matchOver) {
+    hudTitle = state.winner + " Wins Match";
+  } else if (!state.running && state.winner) {
+    hudTitle = state.winner + " Won Round";
+  }
+
+  ctx.fillText(hudTitle, arena.width / 2, 45);
+  ctx.textAlign = "start";
+
+  ctx.fillStyle = "#f8fbff";
+  ctx.font = "bold 15px Arial";
+  ctx.fillText("Rounds: " + state.playerRoundsWon, 28, 72);
+  ctx.textAlign = "right";
+  ctx.fillText("Rounds: " + state.cpuRoundsWon, arena.width - 28, 72);
   ctx.textAlign = "start";
 }
 
@@ -609,6 +780,8 @@ function render(images) {
   drawHud();
   drawFighter(images, cpu);
   drawFighter(images, player);
+  drawPet(cpu);
+  drawPet(player);
 }
 
 function gameLoop(images, timestamp) {
@@ -623,6 +796,8 @@ function gameLoop(images, timestamp) {
   updateCpu(dt);
   updateJump(player, dt);
   updateJump(cpu, dt);
+  updatePet(player, dt);
+  updatePet(cpu, dt);
   updateAttack(player, cpu, dt);
   updateAttack(cpu, player, dt);
   updateDefense(player, dt);
@@ -707,7 +882,11 @@ function bindControls() {
         break;
       case "r":
       case "R":
-        restartRound();
+        if (state.matchOver) {
+          restartMatch();
+        } else {
+          restartRound();
+        }
         break;
     }
   });
@@ -735,6 +914,6 @@ function bindControls() {
 loadImages((images) => {
   Object.assign(imageCache, images);
   bindControls();
-  setStatus("Fight started. Close the distance and land a hit.");
+  setStatus("Round 1 started. Close the distance and land a hit.");
   requestAnimationFrame((timestamp) => gameLoop(imageCache, timestamp));
 });
