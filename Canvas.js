@@ -9,6 +9,9 @@ const matchOverlayKicker = document.getElementById("matchOverlayKicker");
 const matchOverlayTitle = document.getElementById("matchOverlayTitle");
 const matchOverlayText = document.getElementById("matchOverlayText");
 const pauseButton = document.getElementById("pauseGame");
+const petOptions = document.getElementById("petOptions");
+const startOverlayDescription = document.getElementById("startOverlayDescription");
+const livePetSwitcher = document.getElementById("livePetSwitcher");
 
 const arena = {
   width: canvas.width,
@@ -44,6 +47,7 @@ const state = {
   cpuRoundsWon: 0,
   roundsToWin: 3,
   matchOver: false,
+  selectedPetKey: "hawk",
 };
 
 const physics = {
@@ -51,7 +55,58 @@ const physics = {
   jumpVelocity: -700,
 };
 
+const combat = {
+  minimumGap: 18,
+  playerPreferredRange: 108,
+  cpuPreferredRange: 124,
+};
+
 let audioContext;
+
+const petCatalog = {
+  hawk: {
+    name: "Storm Hawk",
+    type: "hawk",
+    movementType: "air",
+    accent: "#ffd166",
+    glow: "rgba(255, 189, 92, 0.32)",
+    role: "Fast scout",
+  },
+  wolf: {
+    name: "Shadow Wolf",
+    type: "wolf",
+    movementType: "ground",
+    accent: "#c2c7d0",
+    glow: "rgba(184, 196, 212, 0.28)",
+    role: "Relentless hunter",
+  },
+  snake: {
+    name: "Viper Coil",
+    type: "snake",
+    movementType: "ground",
+    accent: "#8fd694",
+    glow: "rgba(113, 201, 126, 0.28)",
+    role: "Silent striker",
+  },
+  phoenix: {
+    name: "Ash Phoenix",
+    type: "phoenix",
+    movementType: "air",
+    accent: "#ff9f1c",
+    glow: "rgba(255, 132, 76, 0.32)",
+    role: "Blazing spirit",
+  },
+  dragon: {
+    name: "Sky Dragon",
+    type: "dragon",
+    movementType: "air",
+    accent: "#c084fc",
+    glow: "rgba(185, 131, 255, 0.28)",
+    role: "Ancient power",
+  },
+};
+
+const petOrder = ["hawk", "wolf", "snake", "phoenix", "dragon"];
 
 const fighterDefaults = {
   player: {
@@ -125,6 +180,9 @@ function createFighter(config) {
     hitFlashTimer: 0,
     tint: config.tint,
     spriteScale: config.spriteScale,
+    bodyInsetX: config.bodyInsetX,
+    bodyInsetTop: config.bodyInsetTop,
+    bodyInsetBottom: config.bodyInsetBottom,
     velocityY: 0,
     isJumping: false,
     pet: {
@@ -148,11 +206,14 @@ const player = createFighter({
   speed: 240,
   tint: "rgba(255, 196, 61, 0.18)",
   spriteScale: 1,
+  bodyInsetX: 46,
+  bodyInsetTop: 30,
+  bodyInsetBottom: 10,
   pet: {
-    name: "Solar Eagle",
-    type: "eagle",
-    accent: "#ffd166",
-    glow: "rgba(255, 189, 92, 0.32)",
+    name: petCatalog.hawk.name,
+    type: petCatalog.hawk.type,
+    accent: petCatalog.hawk.accent,
+    glow: petCatalog.hawk.glow,
   },
 });
 
@@ -165,6 +226,9 @@ const cpu = createFighter({
   speed: 180,
   tint: "rgba(70, 160, 255, 0.18)",
   spriteScale: -1,
+  bodyInsetX: 46,
+  bodyInsetTop: 30,
+  bodyInsetBottom: 10,
   pet: {
     name: "Frost Owl",
     type: "owl",
@@ -177,6 +241,54 @@ function setStatus(message) {
   statusText.textContent = message;
 }
 
+function applyPetToFighter(fighter, petConfig) {
+  fighter.pet.name = petConfig.name;
+  fighter.pet.type = petConfig.type;
+  fighter.pet.movementType = petConfig.movementType;
+  fighter.pet.accent = petConfig.accent;
+  fighter.pet.glow = petConfig.glow;
+}
+
+function updatePetSelectionUi() {
+  const activePet = petCatalog[state.selectedPetKey];
+
+  Array.from(petOptions.querySelectorAll(".pet-option")).forEach((button) => {
+    button.classList.toggle("active", button.dataset.pet === state.selectedPetKey);
+  });
+
+  Array.from(livePetSwitcher.querySelectorAll(".pet-pill")).forEach((button) => {
+    button.classList.toggle("active", button.dataset.petLive === state.selectedPetKey);
+  });
+
+  startOverlayDescription.textContent =
+    "Step into the arena with " +
+    activePet.name +
+    " and fight the Frost Owl CPU across a best-of-five match.";
+}
+
+function selectPlayerPet(petKey) {
+  const petConfig = petCatalog[petKey];
+
+  if (!petConfig) {
+    return;
+  }
+
+  state.selectedPetKey = petKey;
+  applyPetToFighter(player, petConfig);
+  player.pet.bobTimer = Math.random() * Math.PI * 2;
+  updatePetSelectionUi();
+
+  if (state.phase !== "pre_match") {
+    setStatus("Companion switched to " + petConfig.name + ".");
+  }
+}
+
+function cyclePlayerPet(direction) {
+  const currentIndex = petOrder.indexOf(state.selectedPetKey);
+  const nextIndex = (currentIndex + direction + petOrder.length) % petOrder.length;
+  selectPlayerPet(petOrder[nextIndex]);
+}
+
 function setUiState() {
   const startVisible = state.phase === "pre_match";
   const matchVisible = state.phase === "match_over";
@@ -186,34 +298,34 @@ function setUiState() {
 
   if (state.phase === "pre_match") {
     gameStateLabel.textContent = "Waiting to start";
-    controlsHint.textContent = "Best of 5";
+    controlsHint.textContent = "Best of 5 | Q / E switch pets";
     pauseButton.textContent = "Pause";
     return;
   }
 
   if (state.phase === "paused") {
     gameStateLabel.textContent = "Paused";
-    controlsHint.textContent = "Press P to resume";
+    controlsHint.textContent = "Press P to resume | Q / E switch pets";
     pauseButton.textContent = "Resume";
     return;
   }
 
   if (state.phase === "match_over") {
     gameStateLabel.textContent = "Match over";
-    controlsHint.textContent = "Restart to play again";
+    controlsHint.textContent = "Restart to play again | Q / E switch pets";
     pauseButton.textContent = "Pause";
     return;
   }
 
   if (!state.running && state.phase === "playing") {
     gameStateLabel.textContent = "Round finished";
-    controlsHint.textContent = "Press R for next round";
+    controlsHint.textContent = "Press R for next round | Q / E switch pets";
     pauseButton.textContent = "Pause";
     return;
   }
 
   gameStateLabel.textContent = "Round active";
-  controlsHint.textContent = "P pauses";
+  controlsHint.textContent = "P pauses | Q / E switch pets";
   pauseButton.textContent = "Pause";
 }
 
@@ -310,11 +422,12 @@ function resetFighter(fighter, defaults) {
   fighter.velocityY = 0;
   fighter.isJumping = false;
   fighter.pet.x = fighter.x + fighter.width / 2 - fighter.facing * 96;
-  fighter.pet.y = fighter.y - 70;
+  fighter.pet.y = fighter.pet.movementType === "ground" ? arena.floorY - 26 : fighter.y - 70;
   fighter.pet.bobTimer = Math.random() * Math.PI * 2;
 }
 
 function restartRound() {
+  applyPetToFighter(player, petCatalog[state.selectedPetKey]);
   resetFighter(player, fighterDefaults.player);
   resetFighter(cpu, fighterDefaults.cpu);
   controls.left = false;
@@ -454,10 +567,66 @@ function clampFighter(fighter) {
   fighter.x = Math.max(30, Math.min(arena.width - fighter.width - 30, fighter.x));
 }
 
+function getBodyBox(fighter) {
+  return {
+    left: fighter.x + fighter.bodyInsetX,
+    right: fighter.x + fighter.width - fighter.bodyInsetX,
+    top: fighter.y + fighter.bodyInsetTop,
+    bottom: fighter.y + fighter.height - fighter.bodyInsetBottom,
+  };
+}
+
+function getAttackBox(attacker) {
+  const reach = attacker.attackRange;
+  const bodyBox = getBodyBox(attacker);
+  const top = bodyBox.top + 12;
+  const bottom = bodyBox.bottom - 6;
+
+  if (attacker.facing === 1) {
+    return {
+      left: bodyBox.right - 6,
+      right: bodyBox.right + reach,
+      top,
+      bottom,
+    };
+  }
+
+  return {
+    left: bodyBox.left - reach,
+    right: bodyBox.left + 6,
+    top,
+    bottom,
+  };
+}
+
+function boxesOverlap(a, b) {
+  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+}
+
+function getHorizontalGap(leftFighter, rightFighter) {
+  return getBodyBox(rightFighter).left - getBodyBox(leftFighter).right;
+}
+
 function getDistance(attacker, defender) {
-  const attackerFront = attacker.facing === 1 ? attacker.x + attacker.width : attacker.x;
-  const defenderFront = defender.facing === 1 ? defender.x : defender.x + defender.width;
-  return Math.abs(defenderFront - attackerFront);
+  const attackOrigin = attacker.facing === 1 ? getBodyBox(attacker).right : getBodyBox(attacker).left;
+  const defendEdge = attacker.facing === 1 ? getBodyBox(defender).left : getBodyBox(defender).right;
+  return Math.abs(defendEdge - attackOrigin);
+}
+
+function resolveFighterOverlap() {
+  const leftFighter = player.x <= cpu.x ? player : cpu;
+  const rightFighter = leftFighter === player ? cpu : player;
+  const gap = getHorizontalGap(leftFighter, rightFighter);
+
+  if (gap >= combat.minimumGap) {
+    return;
+  }
+
+  const pushAmount = (combat.minimumGap - gap) / 2;
+  leftFighter.x -= pushAmount;
+  rightFighter.x += pushAmount;
+  clampFighter(leftFighter);
+  clampFighter(rightFighter);
 }
 
 function dealDamage(attacker, defender) {
@@ -465,7 +634,7 @@ function dealDamage(attacker, defender) {
     return;
   }
 
-  if (getDistance(attacker, defender) > attacker.attackRange) {
+  if (!boxesOverlap(getAttackBox(attacker), getBodyBox(defender))) {
     return;
   }
 
@@ -585,6 +754,7 @@ function updatePlayer(dt) {
   }
 
   clampFighter(player);
+  resolveFighterOverlap();
 }
 
 function updateCpu(dt) {
@@ -600,13 +770,32 @@ function updateCpu(dt) {
   }
 
   const distance = getDistance(cpu, player);
+  const playerAttackThreat = player.isAttacking && boxesOverlap(getAttackBox(player), getBodyBox(cpu));
 
-  if (distance > 105) {
+  if (playerAttackThreat && Math.random() < 0.55) {
+    if (Math.random() < 0.65) {
+      beginBlock(cpu, 0.5);
+    } else {
+      beginDodge(cpu, -1);
+    }
+    return;
+  }
+
+  if (distance > combat.cpuPreferredRange) {
     cpu.x -= cpu.speed * dt;
     if (!cpu.isJumping) {
       cpu.animation = "forward";
     }
     clampFighter(cpu);
+    resolveFighterOverlap();
+    return;
+  }
+
+  if (distance < 66 && !player.isAttacking) {
+    cpu.x += cpu.speed * dt * 0.7;
+    cpu.animation = "backward";
+    clampFighter(cpu);
+    resolveFighterOverlap();
     return;
   }
 
@@ -615,22 +804,24 @@ function updateCpu(dt) {
     return;
   }
 
-  state.cpuDecisionTimer = 0.7 + Math.random() * 0.5;
+  state.cpuDecisionTimer = 0.45 + Math.random() * 0.35;
 
-  if (player.isAttacking && Math.random() < 0.45) {
+  if (player.isAttacking && Math.random() < 0.4) {
     beginBlock(cpu, 0.55);
     return;
   }
 
-  if (!cpu.isJumping && Math.random() < 0.12) {
+  if (!cpu.isJumping && distance > 82 && Math.random() < 0.08) {
     beginJump(cpu);
     return;
   }
 
   if (state.cpuAttackCooldown <= 0) {
-    state.cpuAttackCooldown = 0.9;
+    state.cpuAttackCooldown = 0.7 + Math.random() * 0.35;
 
-    if (Math.random() < 0.5) {
+    if (distance < 92 && Math.random() < 0.65) {
+      beginAttack(cpu, "punch");
+    } else if (Math.random() < 0.5) {
       beginAttack(cpu, "punch");
     } else {
       beginAttack(cpu, "kick");
@@ -663,10 +854,12 @@ function updateJump(fighter, dt) {
 function updatePet(fighter, dt) {
   const pet = fighter.pet;
   const baseX = fighter.x + fighter.width / 2 - fighter.facing * 104;
-  const baseY = fighter.y - 62;
-  const bobOffset = Math.sin(pet.bobTimer) * 10;
+  const isGroundPet = pet.movementType === "ground";
+  const baseY = isGroundPet ? arena.floorY - 24 : fighter.y - 62;
+  const bobOffset = isGroundPet ? Math.sin(pet.bobTimer * 2.4) * 2 : Math.sin(pet.bobTimer) * 10;
+  const travelSpeed = Math.abs(baseX - pet.x);
 
-  pet.bobTimer += dt * 3.2;
+  pet.bobTimer += dt * (isGroundPet ? Math.max(2.2, Math.min(8, travelSpeed * 0.12)) : 3.2);
   pet.x += (baseX - pet.x) * Math.min(1, dt * 7);
   pet.y += (baseY + bobOffset - pet.y) * Math.min(1, dt * 7);
 }
@@ -717,6 +910,9 @@ function drawHealthBar(x, y, width, height, health, label, color, accentText) {
 function drawPet(fighter) {
   const pet = fighter.pet;
   const blink = Math.sin(pet.bobTimer * 1.7) > 0.92;
+  const isGroundPet = pet.movementType === "ground";
+  const walkSwing = Math.sin(pet.bobTimer * 2.4);
+  const slitherWave = Math.sin(pet.bobTimer * 3.4);
 
   ctx.save();
   ctx.translate(pet.x, pet.y);
@@ -726,39 +922,145 @@ function drawPet(fighter) {
 
   ctx.fillStyle = pet.glow;
   ctx.beginPath();
-  ctx.ellipse(0, 18, 24, 10, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, isGroundPet ? 10 : 18, isGroundPet ? 20 : 24, isGroundPet ? 6 : 10, 0, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.shadowBlur = 0;
   ctx.fillStyle = pet.accent;
 
-  ctx.beginPath();
-  ctx.ellipse(0, 0, 16, 18, 0, 0, Math.PI * 2);
-  ctx.fill();
+  if (pet.type === "wolf") {
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 20, 12, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-  ctx.beginPath();
-  ctx.moveTo(-12, -4);
-  ctx.quadraticCurveTo(-28, 8, -14, 12);
-  ctx.quadraticCurveTo(-7, 6, -8, -1);
-  ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-10, -5);
+    ctx.lineTo(-4, -19);
+    ctx.lineTo(1, -7);
+    ctx.fill();
 
-  ctx.beginPath();
-  ctx.moveTo(12, -4);
-  ctx.quadraticCurveTo(28, 8, 14, 12);
-  ctx.quadraticCurveTo(7, 6, 8, -1);
-  ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(10, -5);
+    ctx.lineTo(4, -19);
+    ctx.lineTo(-1, -7);
+    ctx.fill();
 
-  ctx.fillStyle = pet.type === "eagle" ? "#fff5d6" : "#edfaff";
-  ctx.beginPath();
-  ctx.ellipse(0, 4, 9, 8, 0, 0, Math.PI * 2);
-  ctx.fill();
+    ctx.fillStyle = "#edf2f7";
+    ctx.beginPath();
+    ctx.ellipse(0, 5, 9, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
 
-  ctx.fillStyle = pet.type === "eagle" ? "#f77f00" : "#ffb703";
-  ctx.beginPath();
-  ctx.moveTo(0, 6);
-  ctx.lineTo(-5, 10);
-  ctx.lineTo(5, 10);
-  ctx.fill();
+    ctx.fillStyle = "#1f2937";
+    ctx.beginPath();
+    ctx.moveTo(0, 3);
+    ctx.lineTo(-4, 8);
+    ctx.lineTo(4, 8);
+    ctx.fill();
+
+    ctx.fillStyle = pet.accent;
+    ctx.fillRect(-12, 11 + walkSwing * 1.4, 4, 8);
+    ctx.fillRect(8, 11 - walkSwing * 1.4, 4, 8);
+    ctx.fillRect(-4, 12 - walkSwing * 1.2, 4, 7);
+    ctx.fillRect(0, 12 + walkSwing * 1.2, 4, 7);
+  } else if (pet.type === "snake") {
+    ctx.lineWidth = 8;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = pet.accent;
+    ctx.beginPath();
+    ctx.moveTo(-20, 12 + slitherWave * 1.1);
+    ctx.bezierCurveTo(-10, 2 - slitherWave * 2, 2, -2 + slitherWave * 2, 12, 6);
+    ctx.bezierCurveTo(20, 12 + slitherWave * 1.6, 10, 18 - slitherWave * 2, -2, 14);
+    ctx.stroke();
+
+    ctx.fillStyle = "#e8ffe9";
+    ctx.beginPath();
+    ctx.ellipse(15, 6 + slitherWave * 0.8, 7, 6, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#ef476f";
+    ctx.fillRect(21, 6 + slitherWave * 0.8, 6, 2);
+  } else if (pet.type === "phoenix") {
+    ctx.beginPath();
+    ctx.ellipse(0, 2, 15, 15, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(-14, -1);
+    ctx.quadraticCurveTo(-26, -18, -6, -16);
+    ctx.quadraticCurveTo(-3, -5, -10, 5);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(14, -1);
+    ctx.quadraticCurveTo(26, -18, 6, -16);
+    ctx.quadraticCurveTo(3, -5, 10, 5);
+    ctx.fill();
+
+    ctx.fillStyle = "#fff0cf";
+    ctx.beginPath();
+    ctx.ellipse(0, 5, 8, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#ff5400";
+    ctx.beginPath();
+    ctx.moveTo(-2, -12);
+    ctx.lineTo(0, -26);
+    ctx.lineTo(6, -12);
+    ctx.fill();
+  } else if (pet.type === "dragon") {
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 18, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(-14, -4);
+    ctx.quadraticCurveTo(-28, -20, -12, -18);
+    ctx.quadraticCurveTo(-2, -4, -10, 4);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(14, -4);
+    ctx.quadraticCurveTo(28, -20, 12, -18);
+    ctx.quadraticCurveTo(2, -4, 10, 4);
+    ctx.fill();
+
+    ctx.fillStyle = "#efe7ff";
+    ctx.beginPath();
+    ctx.ellipse(0, 5, 10, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = "#6d28d9";
+    ctx.fillRect(-9, -20, 4, 10);
+    ctx.fillRect(5, -20, 4, 10);
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 16, 18, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(-12, -4);
+    ctx.quadraticCurveTo(-28, 8, -14, 12);
+    ctx.quadraticCurveTo(-7, 6, -8, -1);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(12, -4);
+    ctx.quadraticCurveTo(28, 8, 14, 12);
+    ctx.quadraticCurveTo(7, 6, 8, -1);
+    ctx.fill();
+
+    ctx.fillStyle = pet.type === "hawk" ? "#fff5d6" : "#edfaff";
+    ctx.beginPath();
+    ctx.ellipse(0, 4, 9, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = pet.type === "hawk" ? "#f77f00" : "#ffb703";
+    ctx.beginPath();
+    ctx.moveTo(0, 6);
+    ctx.lineTo(-5, 10);
+    ctx.lineTo(5, 10);
+    ctx.fill();
+  }
 
   ctx.fillStyle = blink ? "#07111d" : "#0f1d33";
   ctx.beginPath();
@@ -903,6 +1205,7 @@ function gameLoop(images, timestamp) {
     updateCpu(dt);
     updateJump(player, dt);
     updateJump(cpu, dt);
+    resolveFighterOverlap();
     updatePet(player, dt);
     updatePet(cpu, dt);
     updateAttack(player, cpu, dt);
@@ -941,6 +1244,12 @@ function handleAction(action) {
 }
 
 function bindControls() {
+  Array.from(petOptions.querySelectorAll(".pet-option")).forEach((button) => {
+    button.onclick = () => selectPlayerPet(button.dataset.pet);
+  });
+  Array.from(livePetSwitcher.querySelectorAll(".pet-pill")).forEach((button) => {
+    button.onclick = () => selectPlayerPet(button.dataset.petLive);
+  });
   document.getElementById("startGame").onclick = startMatch;
   document.getElementById("restartMatchButton").onclick = restartMatch;
   document.getElementById("closeOverlayButton").onclick = closeOverlay;
@@ -1028,6 +1337,14 @@ function bindControls() {
       case "P":
         togglePause();
         break;
+      case "q":
+      case "Q":
+        cyclePlayerPet(-1);
+        break;
+      case "e":
+      case "E":
+        cyclePlayerPet(1);
+        break;
     }
   });
 
@@ -1054,6 +1371,7 @@ function bindControls() {
 loadImages((images) => {
   Object.assign(imageCache, images);
   bindControls();
+  selectPlayerPet(state.selectedPetKey);
   setStatus("Press Start Match to enter the arena.");
   setUiState();
   requestAnimationFrame((timestamp) => gameLoop(imageCache, timestamp));

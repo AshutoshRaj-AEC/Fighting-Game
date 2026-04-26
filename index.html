@@ -130,6 +130,62 @@
       gap: 12px;
     }
 
+    .pet-picker {
+      margin-top: 18px;
+      display: grid;
+      gap: 10px;
+      text-align: left;
+    }
+
+    .pet-picker-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #cfe7ff;
+    }
+
+    .pet-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+    }
+
+    .pet-option {
+      min-width: 110px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.05);
+      color: #eef5ff;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    .pet-option:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255, 255, 255, 0.28);
+    }
+
+    .pet-option.active {
+      border-color: rgba(255, 209, 102, 0.72);
+      background: rgba(255, 183, 3, 0.16);
+      box-shadow: inset 0 0 0 1px rgba(255, 209, 102, 0.18);
+    }
+
+    .pet-option-name {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .pet-option-role {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #c9d7ea;
+    }
+
     .overlay-note {
       margin-top: 14px;
       font-size: 14px;
@@ -153,6 +209,41 @@
       flex-wrap: wrap;
       gap: 10px;
       justify-content: center;
+    }
+
+    .live-pet-switcher {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      align-items: center;
+      padding-top: 4px;
+    }
+
+    .live-pet-label {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #d7e7f8;
+    }
+
+    .pet-pill {
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #eef5ff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+    }
+
+    .pet-pill.active {
+      border-color: rgba(255, 209, 102, 0.72);
+      background: rgba(255, 183, 3, 0.16);
+      color: #fff8dc;
     }
 
     button {
@@ -209,7 +300,7 @@
 <body>
   <section class="title">
     <h1>Canvas Fighting Game</h1>
-    <p>Prototype v0.7: a fuller game flow with a start screen, pause/resume, polished HUD, and match-over screen. Use Arrow keys to move, <strong>W</strong> or <strong>Arrow Up</strong> to jump, <strong>A</strong> to punch, <strong>S</strong> to kick, <strong>D</strong> to block, <strong>Space</strong> to dodge, and <strong>P</strong> to pause.</p>
+    <p>Prototype v0.8: tighter combat with hitboxes, overlap control, smarter CPU spacing, and a fuller game flow with start, pause, and match-over screens. Use Arrow keys to move, <strong>W</strong> or <strong>Arrow Up</strong> to jump, <strong>A</strong> to punch, <strong>S</strong> to kick, <strong>D</strong> to block, <strong>Space</strong> to dodge, and <strong>P</strong> to pause.</p>
   </section>
 
   <section class="arena-shell">
@@ -219,7 +310,32 @@
       <div class="overlay-card">
         <div class="overlay-kicker">Arena Intro</div>
         <h2>Ready For The First Round?</h2>
-        <p>Step into the arena with your Solar Eagle companion and fight the Frost Owl CPU across a best-of-five match.</p>
+        <p id="startOverlayDescription">Step into the arena with your selected companion and fight the Frost Owl CPU across a best-of-five match.</p>
+        <div class="pet-picker">
+          <div class="pet-picker-title">Choose Your Companion</div>
+          <div class="pet-options" id="petOptions">
+            <button class="pet-option active" data-pet="hawk" type="button">
+              <div class="pet-option-name">Hawk</div>
+              <div class="pet-option-role">Fast scout</div>
+            </button>
+            <button class="pet-option" data-pet="wolf" type="button">
+              <div class="pet-option-name">Wolf</div>
+              <div class="pet-option-role">Relentless hunter</div>
+            </button>
+            <button class="pet-option" data-pet="snake" type="button">
+              <div class="pet-option-name">Snake</div>
+              <div class="pet-option-role">Silent striker</div>
+            </button>
+            <button class="pet-option" data-pet="phoenix" type="button">
+              <div class="pet-option-name">Phoenix</div>
+              <div class="pet-option-role">Blazing spirit</div>
+            </button>
+            <button class="pet-option" data-pet="dragon" type="button">
+              <div class="pet-option-name">Dragon</div>
+              <div class="pet-option-role">Ancient power</div>
+            </button>
+          </div>
+        </div>
         <div class="overlay-actions">
           <button id="startGame">Start Match</button>
         </div>
@@ -253,10 +369,18 @@
       <button id="restartRound" class="secondary">Restart Round</button>
       <button id="restartMatchInline" class="danger">Restart Match</button>
     </div>
+    <div class="live-pet-switcher" id="livePetSwitcher">
+      <div class="live-pet-label">Switch Companion</div>
+      <button class="pet-pill active" data-pet-live="hawk" type="button">Hawk</button>
+      <button class="pet-pill" data-pet-live="wolf" type="button">Wolf</button>
+      <button class="pet-pill" data-pet-live="snake" type="button">Snake</button>
+      <button class="pet-pill" data-pet-live="phoenix" type="button">Phoenix</button>
+      <button class="pet-pill" data-pet-live="dragon" type="button">Dragon</button>
+    </div>
     <div class="status-row">
       <div class="status-chip" id="gameStateLabel">Waiting to start</div>
       <div class="hud-copy" id="statusText">Press Start Match to enter the arena.</div>
-      <div class="status-chip" id="controlsHint">Best of 5</div>
+      <div class="status-chip" id="controlsHint">Best of 5 | Q / E switch pets</div>
     </div>
   </section>
 
