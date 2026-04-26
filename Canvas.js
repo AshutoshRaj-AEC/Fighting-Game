@@ -12,6 +12,7 @@ const pauseButton = document.getElementById("pauseGame");
 const petOptions = document.getElementById("petOptions");
 const startOverlayDescription = document.getElementById("startOverlayDescription");
 const livePetSwitcher = document.getElementById("livePetSwitcher");
+const petPowerButton = document.getElementById("petPower");
 
 const arena = {
   width: canvas.width,
@@ -48,6 +49,7 @@ const state = {
   roundsToWin: 3,
   matchOver: false,
   selectedPetKey: "hawk",
+  screenShake: 0,
 };
 
 const physics = {
@@ -71,6 +73,7 @@ const petCatalog = {
     accent: "#ffd166",
     glow: "rgba(255, 189, 92, 0.32)",
     role: "Fast scout",
+    powerName: "Dive Strike",
   },
   wolf: {
     name: "Shadow Wolf",
@@ -79,6 +82,7 @@ const petCatalog = {
     accent: "#c2c7d0",
     glow: "rgba(184, 196, 212, 0.28)",
     role: "Relentless hunter",
+    powerName: "Howl Boost",
   },
   snake: {
     name: "Viper Coil",
@@ -87,6 +91,7 @@ const petCatalog = {
     accent: "#8fd694",
     glow: "rgba(113, 201, 126, 0.28)",
     role: "Silent striker",
+    powerName: "Venom Bite",
   },
   phoenix: {
     name: "Ash Phoenix",
@@ -95,6 +100,7 @@ const petCatalog = {
     accent: "#ff9f1c",
     glow: "rgba(255, 132, 76, 0.32)",
     role: "Blazing spirit",
+    powerName: "Rebirth Flame",
   },
   dragon: {
     name: "Sky Dragon",
@@ -103,6 +109,7 @@ const petCatalog = {
     accent: "#c084fc",
     glow: "rgba(185, 131, 255, 0.28)",
     role: "Ancient power",
+    powerName: "Sky Breath",
   },
 };
 
@@ -117,6 +124,27 @@ const fighterDefaults = {
     x: 640,
     health: 100,
   },
+};
+
+const effects = {
+  particles: [],
+  floatingTexts: [],
+};
+
+const buffs = {
+  playerDamageBoostTimer: 0,
+  playerDamageBoostAmount: 0,
+  cpuShieldTimer: 0,
+};
+
+const statusEffects = {
+  cpuPoisonTimer: 0,
+  cpuPoisonTickTimer: 0,
+  cpuPoisonDamage: 2,
+};
+
+const cooldowns = {
+  playerPetPower: 0,
 };
 
 function loadImage(src, callback) {
@@ -247,6 +275,7 @@ function applyPetToFighter(fighter, petConfig) {
   fighter.pet.movementType = petConfig.movementType;
   fighter.pet.accent = petConfig.accent;
   fighter.pet.glow = petConfig.glow;
+  fighter.pet.powerName = petConfig.powerName;
 }
 
 function updatePetSelectionUi() {
@@ -263,7 +292,9 @@ function updatePetSelectionUi() {
   startOverlayDescription.textContent =
     "Step into the arena with " +
     activePet.name +
-    " and fight the Frost Owl CPU across a best-of-five match.";
+    " and use " +
+    activePet.powerName +
+    " against the Frost Owl CPU across a best-of-five match.";
 }
 
 function selectPlayerPet(petKey) {
@@ -298,35 +329,42 @@ function setUiState() {
 
   if (state.phase === "pre_match") {
     gameStateLabel.textContent = "Waiting to start";
-    controlsHint.textContent = "Best of 5 | Q / E switch pets";
+    controlsHint.textContent = "Best of 5 | Q / E switch pets | F pet power";
     pauseButton.textContent = "Pause";
+    petPowerButton.textContent = "Pet Power";
     return;
   }
 
   if (state.phase === "paused") {
     gameStateLabel.textContent = "Paused";
-    controlsHint.textContent = "Press P to resume | Q / E switch pets";
+    controlsHint.textContent = "Press P to resume | Q / E switch pets | F pet power";
     pauseButton.textContent = "Resume";
+    petPowerButton.textContent = player.pet.powerName;
     return;
   }
 
   if (state.phase === "match_over") {
     gameStateLabel.textContent = "Match over";
-    controlsHint.textContent = "Restart to play again | Q / E switch pets";
+    controlsHint.textContent = "Restart to play again | Q / E switch pets | F pet power";
     pauseButton.textContent = "Pause";
+    petPowerButton.textContent = player.pet.powerName;
     return;
   }
 
   if (!state.running && state.phase === "playing") {
     gameStateLabel.textContent = "Round finished";
-    controlsHint.textContent = "Press R for next round | Q / E switch pets";
+    controlsHint.textContent = "Press R for next round | Q / E switch pets | F pet power";
     pauseButton.textContent = "Pause";
+    petPowerButton.textContent = player.pet.powerName;
     return;
   }
 
   gameStateLabel.textContent = "Round active";
-  controlsHint.textContent = "P pauses | Q / E switch pets";
+  controlsHint.textContent = "P pauses | Q / E switch pets | F pet power";
   pauseButton.textContent = "Pause";
+  petPowerButton.textContent = cooldowns.playerPetPower > 0
+    ? player.pet.powerName + " (" + cooldowns.playerPetPower.toFixed(1) + "s)"
+    : player.pet.powerName;
 }
 
 function openMatchOverlay(title, description) {
@@ -426,10 +464,23 @@ function resetFighter(fighter, defaults) {
   fighter.pet.bobTimer = Math.random() * Math.PI * 2;
 }
 
+function resetEffectsAndCooldowns() {
+  effects.particles = [];
+  effects.floatingTexts = [];
+  buffs.playerDamageBoostTimer = 0;
+  buffs.playerDamageBoostAmount = 0;
+  buffs.cpuShieldTimer = 0;
+  statusEffects.cpuPoisonTimer = 0;
+  statusEffects.cpuPoisonTickTimer = 0;
+  cooldowns.playerPetPower = 0;
+  state.screenShake = 0;
+}
+
 function restartRound() {
   applyPetToFighter(player, petCatalog[state.selectedPetKey]);
   resetFighter(player, fighterDefaults.player);
   resetFighter(cpu, fighterDefaults.cpu);
+  resetEffectsAndCooldowns();
   controls.left = false;
   controls.right = false;
   state.running = true;
@@ -471,6 +522,30 @@ function togglePause() {
   state.phase = state.paused ? "paused" : "playing";
   setStatus(state.paused ? "Game paused. Press P or Pause to resume." : "Back in the fight.");
   setUiState();
+}
+
+function spawnFloatingText(x, y, text, color) {
+  effects.floatingTexts.push({
+    x,
+    y,
+    text,
+    color,
+    lifetime: 0.8,
+  });
+}
+
+function spawnImpact(x, y, color, amount) {
+  for (let index = 0; index < amount; index += 1) {
+    effects.particles.push({
+      x,
+      y,
+      vx: (Math.random() - 0.5) * 180,
+      vy: (Math.random() - 0.8) * 150,
+      radius: 2 + Math.random() * 3,
+      color,
+      lifetime: 0.32 + Math.random() * 0.25,
+    });
+  }
 }
 
 function closeOverlay() {
@@ -629,29 +704,25 @@ function resolveFighterOverlap() {
   clampFighter(rightFighter);
 }
 
-function dealDamage(attacker, defender) {
-  if (attacker.attackConnected || !state.running || state.paused) {
+function applyDamage(attacker, defender, damage, context) {
+  const defenderBox = getBodyBox(defender);
+  const impactX = attacker.facing === 1 ? defenderBox.left + 10 : defenderBox.right - 10;
+  const impactY = defenderBox.top + (defenderBox.bottom - defenderBox.top) * 0.45;
+  const finalDamage = Math.max(0, Math.round(damage));
+
+  if (finalDamage <= 0) {
     return;
   }
 
-  if (!boxesOverlap(getAttackBox(attacker), getBodyBox(defender))) {
-    return;
-  }
-
-  let damage = attacker.attackDamage;
-
-  if (defender.isBlocking) {
-    damage = Math.ceil(damage * 0.35);
-    setStatus(defender.name + " blocked most of the " + attacker.attackName.toLowerCase() + ".");
-    playSound("block");
-  } else {
-    setStatus(attacker.name + " landed a " + attacker.attackName.toLowerCase() + ".");
-    playSound("hit");
-  }
-
-  defender.health = Math.max(0, defender.health - damage);
+  defender.health = Math.max(0, defender.health - finalDamage);
   defender.hitFlashTimer = 0.18;
-  attacker.attackConnected = true;
+  state.screenShake = Math.max(state.screenShake, context === "pet_power" ? 9 : 6);
+  spawnImpact(impactX, impactY, defender === cpu ? "#ffb703" : "#90e0ef", context === "pet_power" ? 18 : 12);
+  spawnFloatingText(impactX, impactY - 10, "-" + finalDamage, "#fff1a8");
+
+  if (context === "pet_power") {
+    setStatus(attacker.name + "'s " + attacker.pet.powerName + " hit for " + finalDamage + ".");
+  }
 
   if (defender.health === 0) {
     state.running = false;
@@ -676,6 +747,101 @@ function dealDamage(attacker, defender) {
     }
     playSound("win");
   }
+}
+
+function usePlayerPetPower() {
+  if (!state.running || state.paused || cooldowns.playerPetPower > 0) {
+    return;
+  }
+
+  const petKey = state.selectedPetKey;
+  const distance = getDistance(player, cpu);
+
+  if (petKey === "hawk") {
+    if (distance > 180) {
+      setStatus("Storm Hawk needs a closer target for Dive Strike.");
+      return;
+    }
+    applyDamage(player, cpu, 14, "pet_power");
+    cooldowns.playerPetPower = 8;
+  } else if (petKey === "wolf") {
+    buffs.playerDamageBoostTimer = 4;
+    buffs.playerDamageBoostAmount = 8;
+    spawnFloatingText(player.x + player.width / 2, player.y - 20, "+Howl Boost", "#e5f4ff");
+    spawnImpact(player.x + player.width / 2, player.y + 40, "#cfd8e3", 10);
+    setStatus("Shadow Wolf boosted your next attacks.");
+    cooldowns.playerPetPower = 10;
+  } else if (petKey === "snake") {
+    if (distance > 150) {
+      setStatus("Viper Coil needs to be closer to poison the enemy.");
+      return;
+    }
+    applyDamage(player, cpu, 6, "pet_power");
+    statusEffects.cpuPoisonTimer = 4;
+    statusEffects.cpuPoisonTickTimer = 0.7;
+    spawnFloatingText(cpu.x + cpu.width / 2, cpu.y - 18, "Poisoned", "#b9f18d");
+    cooldowns.playerPetPower = 9;
+  } else if (petKey === "phoenix") {
+    player.health = Math.min(100, player.health + 12);
+    spawnFloatingText(player.x + player.width / 2, player.y - 18, "+12 HP", "#ffd6a5");
+    spawnImpact(player.x + player.width / 2, player.y + 30, "#ff8c42", 16);
+    if (distance <= 170) {
+      applyDamage(player, cpu, 8, "pet_power");
+    } else {
+      setStatus("Ash Phoenix restored your health.");
+    }
+    cooldowns.playerPetPower = 11;
+  } else if (petKey === "dragon") {
+    if (distance > 220) {
+      setStatus("Sky Dragon needs a clearer line for Sky Breath.");
+      return;
+    }
+    applyDamage(player, cpu, 20, "pet_power");
+    cpu.x += 30;
+    clampFighter(cpu);
+    cooldowns.playerPetPower = 12;
+  }
+
+  playSound("hit");
+  setUiState();
+}
+
+function dealDamage(attacker, defender) {
+  if (attacker.attackConnected || !state.running || state.paused) {
+    return;
+  }
+
+  if (!boxesOverlap(getAttackBox(attacker), getBodyBox(defender))) {
+    return;
+  }
+
+  let damage = attacker.attackDamage;
+
+  if (defender.isBlocking) {
+    damage = Math.ceil(damage * 0.35);
+    if (defender === cpu && buffs.cpuShieldTimer > 0) {
+      damage = Math.ceil(damage * 0.55);
+    }
+    setStatus(defender.name + " blocked most of the " + attacker.attackName.toLowerCase() + ".");
+    playSound("block");
+    spawnFloatingText(defender.x + defender.width / 2, defender.y - 18, "Block", "#d8f3ff");
+  } else {
+    setStatus(attacker.name + " landed a " + attacker.attackName.toLowerCase() + ".");
+    playSound("hit");
+  }
+
+  attacker.attackConnected = true;
+  const boostedDamage = attacker === player && buffs.playerDamageBoostTimer > 0
+    ? damage + buffs.playerDamageBoostAmount
+    : damage;
+
+  if (attacker === player && buffs.playerDamageBoostTimer > 0) {
+    buffs.playerDamageBoostTimer = 0;
+    buffs.playerDamageBoostAmount = 0;
+    spawnFloatingText(player.x + player.width / 2, player.y - 22, "Boost used", "#fff6cf");
+  }
+
+  applyDamage(attacker, defender, boostedDamage, "attack");
 }
 
 function updateAttack(fighter, defender, dt) {
@@ -724,6 +890,43 @@ function updateDefense(fighter, dt) {
   if (fighter.hitFlashTimer > 0) {
     fighter.hitFlashTimer = Math.max(0, fighter.hitFlashTimer - dt);
   }
+}
+
+function updateCooldownsAndEffects(dt) {
+  cooldowns.playerPetPower = Math.max(0, cooldowns.playerPetPower - dt);
+  buffs.playerDamageBoostTimer = Math.max(0, buffs.playerDamageBoostTimer - dt);
+  buffs.cpuShieldTimer = Math.max(0, buffs.cpuShieldTimer - dt);
+
+  if (statusEffects.cpuPoisonTimer > 0) {
+    statusEffects.cpuPoisonTimer -= dt;
+    statusEffects.cpuPoisonTickTimer -= dt;
+
+    if (statusEffects.cpuPoisonTickTimer <= 0 && state.running) {
+      statusEffects.cpuPoisonTickTimer = 0.7;
+      applyDamage(player, cpu, statusEffects.cpuPoisonDamage, "pet_power");
+      spawnFloatingText(cpu.x + cpu.width / 2, cpu.y - 30, "Poison", "#b9f18d");
+    }
+  }
+
+  effects.particles = effects.particles.filter((particle) => {
+    particle.lifetime -= dt;
+    particle.x += particle.vx * dt;
+    particle.y += particle.vy * dt;
+    particle.vy += 180 * dt;
+    return particle.lifetime > 0;
+  });
+
+  effects.floatingTexts = effects.floatingTexts.filter((text) => {
+    text.lifetime -= dt;
+    text.y -= 24 * dt;
+    return text.lifetime > 0;
+  });
+
+  if (state.screenShake > 0) {
+    state.screenShake = Math.max(0, state.screenShake - dt * 22);
+  }
+
+  setUiState();
 }
 
 function updatePlayer(dt) {
@@ -806,6 +1009,13 @@ function updateCpu(dt) {
 
   state.cpuDecisionTimer = 0.45 + Math.random() * 0.35;
 
+  if (buffs.cpuShieldTimer <= 0 && Math.random() < 0.16) {
+    buffs.cpuShieldTimer = 2.2;
+    spawnFloatingText(cpu.x + cpu.width / 2, cpu.y - 26, "Owl Guard", "#d9f7ff");
+    setStatus("Frost Owl raised a shield around the CPU.");
+    return;
+  }
+
   if (player.isAttacking && Math.random() < 0.4) {
     beginBlock(cpu, 0.55);
     return;
@@ -886,6 +1096,27 @@ function drawBackground() {
   ctx.moveTo(0, arena.floorY + 2);
   ctx.lineTo(arena.width, arena.floorY + 2);
   ctx.stroke();
+}
+
+function drawCombatEffects() {
+  effects.particles.forEach((particle) => {
+    ctx.fillStyle = particle.color;
+    ctx.globalAlpha = Math.max(0, particle.lifetime / 0.55);
+    ctx.beginPath();
+    ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  effects.floatingTexts.forEach((text) => {
+    ctx.globalAlpha = Math.max(0, text.lifetime / 0.8);
+    ctx.fillStyle = text.color;
+    ctx.font = "bold 16px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(text.text, text.x, text.y);
+    ctx.textAlign = "start";
+    ctx.globalAlpha = 1;
+  });
 }
 
 function drawHealthBar(x, y, width, height, health, label, color, accentText) {
@@ -1097,6 +1328,13 @@ function drawFighter(images, fighter) {
     ctx.fillRect(-fighter.width / 2, 0, fighter.width, fighter.height);
   }
 
+  if (fighter === cpu && buffs.cpuShieldTimer > 0) {
+    ctx.fillStyle = "rgba(150, 225, 255, 0.2)";
+    ctx.beginPath();
+    ctx.ellipse(0, fighter.height * 0.5, fighter.width * 0.38, fighter.height * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   ctx.restore();
 
   ctx.fillStyle = fighter.tint;
@@ -1189,6 +1427,7 @@ function render(images) {
   drawFighter(images, player);
   drawPet(cpu);
   drawPet(player);
+  drawCombatEffects();
   drawPausedOverlay();
 }
 
@@ -1206,6 +1445,7 @@ function gameLoop(images, timestamp) {
     updateJump(player, dt);
     updateJump(cpu, dt);
     resolveFighterOverlap();
+    updateCooldownsAndEffects(dt);
     updatePet(player, dt);
     updatePet(cpu, dt);
     updateAttack(player, cpu, dt);
@@ -1215,11 +1455,19 @@ function gameLoop(images, timestamp) {
     updateAnimation(player, dt);
     updateAnimation(cpu, dt);
   } else {
+    updateCooldownsAndEffects(dt);
     updatePet(player, dt);
     updatePet(cpu, dt);
   }
 
+  ctx.save();
+  if (state.screenShake > 0) {
+    const shakeX = (Math.random() - 0.5) * state.screenShake;
+    const shakeY = (Math.random() - 0.5) * state.screenShake;
+    ctx.translate(shakeX, shakeY);
+  }
   render(images);
+  ctx.restore();
   requestAnimationFrame((nextTimestamp) => gameLoop(images, nextTimestamp));
 }
 
@@ -1254,6 +1502,7 @@ function bindControls() {
   document.getElementById("restartMatchButton").onclick = restartMatch;
   document.getElementById("closeOverlayButton").onclick = closeOverlay;
   document.getElementById("restartMatchInline").onclick = restartMatch;
+  document.getElementById("petPower").onclick = usePlayerPetPower;
   document.getElementById("pauseGame").onclick = togglePause;
   document.getElementById("punch").onclick = () => handleAction("punch");
   document.getElementById("kick").onclick = () => handleAction("kick");
@@ -1336,6 +1585,10 @@ function bindControls() {
       case "p":
       case "P":
         togglePause();
+        break;
+      case "f":
+      case "F":
+        usePlayerPetPower();
         break;
       case "q":
       case "Q":

@@ -300,7 +300,7 @@
 <body>
   <section class="title">
     <h1>Canvas Fighting Game</h1>
-    <p>Prototype v0.8: tighter combat with hitboxes, overlap control, smarter CPU spacing, and a fuller game flow with start, pause, and match-over screens. Use Arrow keys to move, <strong>W</strong> or <strong>Arrow Up</strong> to jump, <strong>A</strong> to punch, <strong>S</strong> to kick, <strong>D</strong> to block, <strong>Space</strong> to dodge, and <strong>P</strong> to pause.</p>
+    <p>Prototype v0.9: tighter combat, selectable pet companions with special powers, and stronger combat effects. Use Arrow keys to move, <strong>W</strong> or <strong>Arrow Up</strong> to jump, <strong>A</strong> to punch, <strong>S</strong> to kick, <strong>D</strong> to block, <strong>Space</strong> to dodge, <strong>F</strong> to trigger pet power, and <strong>P</strong> to pause.</p>
   </section>
 
   <section class="arena-shell">
@@ -365,6 +365,7 @@
       <button id="forward" class="secondary">Step Forward</button>
       <button id="Block">Block</button>
       <button id="Dodge" class="secondary">Dodge</button>
+      <button id="petPower">Pet Power</button>
       <button id="pauseGame" class="secondary">Pause</button>
       <button id="restartRound" class="secondary">Restart Round</button>
       <button id="restartMatchInline" class="danger">Restart Match</button>
@@ -380,7 +381,7 @@
     <div class="status-row">
       <div class="status-chip" id="gameStateLabel">Waiting to start</div>
       <div class="hud-copy" id="statusText">Press Start Match to enter the arena.</div>
-      <div class="status-chip" id="controlsHint">Best of 5 | Q / E switch pets</div>
+      <div class="status-chip" id="controlsHint">Best of 5 | Q / E switch pets | F pet power</div>
     </div>
   </section>
 
