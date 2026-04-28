@@ -1,33 +1,55 @@
 # Fighting Game Prototype
 
-A browser-based 2D fighting game prototype built with HTML5 canvas, vanilla JavaScript, and sprite-based animations.
+A browser-based 2D fighting game prototype built with HTML5 Canvas, vanilla JavaScript, sprite animations, pet companions, and round-based combat.
+
+## Live Demo
+
+Play the deployed game here:
+
+`https://imaginative-baklava-e105c6.netlify.app/`
 
 ## Current Version
 
-This project is currently a cleaned and expanded prototype with:
+The project is currently at `v0.9` with:
 
-- player movement
-- jump mechanics with gravity
-- punch and kick attacks
-- block and dodge actions
-- health bars
-- round restart
-- a simple CPU opponent
+- player movement and jump mechanics
+- punch, kick, block, and dodge actions
+- round-based match flow
+- start screen, pause/resume, and match-over UI
+- health bars and HUD
+- combat hitboxes and overlap control
+- smarter CPU spacing and reactions
+- selectable pet companions
+- live pet switching during the match
+- pet powers
+- combat effects like floating damage text, sparks, and screen shake
 - built-in sound effects using the Web Audio API
+
+## Available Pet Companions
+
+The player can choose between:
+
+- Hawk
+- Wolf
+- Snake
+- Phoenix
+- Dragon
+
+The CPU uses:
+
+- Frost Owl
 
 ## Project Files
 
-- `Canvas.html` - the main page and UI
-- `Canvas.js` - the game logic, controls, combat, and rendering
+- `index.html` - the main app page and UI
+- `Canvas.js` - game logic, rendering, combat, pets, and effects
 - `images/` - character sprites and background assets
 
-## How To Run
-
-You can run the game in either of these ways.
+## How To Run Locally
 
 ### Option 1: Open Directly
 
-Open `Canvas.html` in your browser.
+Open `index.html` in your browser.
 
 ### Option 2: Run A Local Server
 
@@ -40,7 +62,7 @@ python -m http.server 8000
 Then open:
 
 ```text
-http://localhost:8000/Canvas.html
+http://localhost:8000/
 ```
 
 ## Controls
@@ -51,20 +73,24 @@ http://localhost:8000/Canvas.html
 - `S` - kick
 - `D` - block
 - `Space` - dodge
-- `R` - restart round
+- `F` - trigger pet power
+- `Q` / `E` - switch pets
+- `P` - pause / resume
+- `R` - restart round or continue flow depending on state
 
 You can also use the on-screen buttons.
 
 ## Notes
 
-- Sound effects start after your first interaction because browsers usually require a user action before enabling audio.
-- This is still a prototype, not a full fighting game yet.
+- Sound effects begin after your first interaction because browsers usually require a user action before enabling audio.
+- This is still a prototype and not a full production fighting game yet.
 
-## Possible Next Steps
+## Next Ideas
 
-- add a proper start screen
-- add rounds and score tracking
-- improve CPU behavior
-- add attack hitboxes and better collision logic
-- add more animations and character states
-- add background music and visual effects
+- difficulty levels
+- special attacks and combo chains
+- stronger AI behavior
+- pet-specific cooldown UI
+- better sprite art and animation polish
+- menu/settings screen
+- background music and audio controls
