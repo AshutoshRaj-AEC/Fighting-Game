@@ -6,7 +6,7 @@ A browser-based 2D fighting game prototype built with HTML5 Canvas, vanilla Java
 
 Play the deployed game here:
 
-`https://imaginative-baklava-e105c6.netlify.app/`
+[Live Demo](https://imaginative-baklava-e105c6.netlify.app/)
 
 ## Current Version
 
